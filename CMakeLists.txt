@@ -28,3 +28,44 @@ add_test(NAME freeze_tests COMMAND freeze_tests)
 if(GF_BUILD_PLUGIN)
     add_subdirectory(external/JUCE)
 endif()
+
+if(GF_BUILD_PLUGIN)
+    # On macOS the user VST3 folder needs no admin rights; on Windows it does, so don't copy there.
+    if(APPLE)
+        set(GF_COPY_AFTER_BUILD TRUE)
+    else()
+        set(GF_COPY_AFTER_BUILD FALSE)
+    endif()
+
+    set(GF_PLUGIN_SOURCES source/PluginProcessor.cpp source/PluginEditor.cpp)
+    set(GF_JUCE_DEFINES JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0 JUCE_DISPLAY_SPLASH_SCREEN=0)
+
+    juce_add_plugin(Freeze
+        COMPANY_NAME "fouren"
+        PRODUCT_NAME "Freeze"
+        BUNDLE_ID com.fouren.freeze
+        PLUGIN_MANUFACTURER_CODE Fren
+        PLUGIN_CODE Frz1
+        FORMATS VST3 Standalone
+        IS_SYNTH FALSE
+        NEEDS_MIDI_INPUT FALSE
+        NEEDS_MIDI_OUTPUT FALSE
+        IS_MIDI_EFFECT FALSE
+        VST3_CATEGORIES Fx
+        COPY_PLUGIN_AFTER_BUILD ${GF_COPY_AFTER_BUILD})
+    target_sources(Freeze PRIVATE ${GF_PLUGIN_SOURCES})
+    target_compile_definitions(Freeze PUBLIC ${GF_JUCE_DEFINES})
+    target_link_libraries(Freeze
+        PRIVATE freeze_dsp juce::juce_audio_utils
+        PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_lto_flags juce::juce_recommended_warning_flags)
+
+    # Processor and editor tests (need JUCE, so they live in their own binary)
+    juce_add_console_app(freeze_plugin_tests PRODUCT_NAME "freeze_plugin_tests")
+    target_sources(freeze_plugin_tests PRIVATE tests/TestMain.cpp tests/plugin/test_processor.cpp ${GF_PLUGIN_SOURCES})
+    target_include_directories(freeze_plugin_tests PRIVATE source)
+    target_compile_definitions(freeze_plugin_tests PRIVATE ${GF_JUCE_DEFINES} JucePlugin_Name="Freeze")
+    target_link_libraries(freeze_plugin_tests
+        PRIVATE freeze_dsp juce::juce_audio_utils
+        PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+    add_test(NAME freeze_plugin_tests COMMAND freeze_plugin_tests)
+endif()
