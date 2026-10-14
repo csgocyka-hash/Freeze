@@ -1,0 +1,9 @@
+.venv/
+external/
+build/
+build-universal/
+renders/
+dist/
+*.log
+.DS_Store
+.superpowers/
