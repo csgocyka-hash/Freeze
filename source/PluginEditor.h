@@ -55,6 +55,7 @@ private:
     juce::TextButton previous { juce::CharPointer_UTF8 ("\xe2\x80\xb9") }, next { juce::CharPointer_UTF8 ("\xe2\x80\xba") };
     juce::Label presetName;
     std::vector<Shard> shards;
+    std::vector<float> edgeNoise; // -1..1 per edge point of the splash
     int shownPreset = -1;
     juce::Colour accent, accentLight, accentDeep;
 

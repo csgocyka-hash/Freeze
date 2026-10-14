@@ -8,12 +8,15 @@ const juce::Colour panelTop (0xfff4f5f7), panelBottom (0xffe2e5ea), ink (0xff3b4
 constexpr int kWidth = 560, kHeight = 330;
 constexpr float kSplashRadius = 86.0f;
 
-juce::Path hexagon (juce::Point<float> c, float r)
+// Knurled metal skirt: a ring of rounded teeth, rotated with the knob so it reads as a physical part.
+juce::Path knurledRing (juce::Point<float> c, float outer, float inner, int teeth, float rotation)
 {
     juce::Path p;
-    for (int i = 0; i < 6; ++i)
+    const int steps = teeth * 4;
+    for (int i = 0; i <= steps; ++i)
     {
-        const float a = juce::MathConstants<float>::pi / 3.0f * (float) i + juce::MathConstants<float>::pi / 6.0f;
+        const float a = rotation + juce::MathConstants<float>::twoPi * (float) i / (float) steps;
+        const float r = (i % 4 == 1 || i % 4 == 2) ? outer : inner;
         const auto pt = c.getPointOnCircumference (r, a);
         i == 0 ? p.startNewSubPath (pt) : p.lineTo (pt);
     }
@@ -23,51 +26,85 @@ juce::Path hexagon (juce::Point<float> c, float r)
 } // namespace
 
 void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
-                                          float startAngle, float endAngle, juce::Slider&)
+                                          float startAngle, float endAngle, juce::Slider& slider)
 {
+    const bool onColour = slider.getProperties().getWithDefault ("onColour", false);
     const auto bounds = juce::Rectangle<int> (x, y, width, height).toFloat();
     const auto c = bounds.getCentre();
-    const float ringRadius = juce::jmin (bounds.getWidth(), bounds.getHeight()) * 0.5f - 4.0f;
-    const float capRadius = ringRadius - juce::jmax (8.0f, ringRadius * 0.2f);
+    const float size = juce::jmin (bounds.getWidth(), bounds.getHeight());
+    const float ringRadius = size * 0.5f - 3.0f;          // value ring
+    const float skirtRadius = ringRadius - size * 0.075f; // knurled metal edge
+    const float capRadius = skirtRadius * 0.80f;          // domed top
     const float angle = startAngle + sliderPos * (endAngle - startAngle);
+    const float ringWidth = juce::jmax (2.5f, size * 0.025f);
 
-    // Tick dots around the ring
-    for (int i = 0; i <= 20; ++i)
-    {
-        const float a = startAngle + (endAngle - startAngle) * (float) i / 20.0f;
-        const auto p = c.getPointOnCircumference (ringRadius + 3.5f, a);
-        g.setColour (juce::Colour (0xffaab1bc).withAlpha (0.8f));
-        g.fillEllipse (juce::Rectangle<float> (2.0f, 2.0f).withCentre (p));
-    }
-
-    // Track and value arc
+    // Value ring: recessed track, then the lit arc in the preset colour
     juce::Path track, value;
-    track.addCentredArc (c.x, c.y, ringRadius - 3.0f, ringRadius - 3.0f, 0.0f, startAngle, endAngle, true);
-    g.setColour (juce::Colour (0xffc9ced6).withAlpha (0.6f));
-    g.strokePath (track, juce::PathStrokeType (3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    track.addCentredArc (c.x, c.y, ringRadius, ringRadius, 0.0f, startAngle, endAngle, true);
+    g.setColour (onColour ? juce::Colour (0x40000000) : juce::Colour (0xffc3c8d0));
+    g.strokePath (track, juce::PathStrokeType (ringWidth + 1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.setColour (onColour ? juce::Colours::white.withAlpha (0.3f) : juce::Colour (0xffe9ecf0));
+    g.strokePath (track, juce::PathStrokeType (ringWidth - 0.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     if (sliderPos > 0.0f)
     {
-        value.addCentredArc (c.x, c.y, ringRadius - 3.0f, ringRadius - 3.0f, 0.0f, startAngle, angle, true);
-        g.setGradientFill (juce::ColourGradient (accent, c.x - ringRadius, c.y + ringRadius, accentLight,
-                                                 c.x + ringRadius, c.y - ringRadius, false));
-        g.strokePath (value, juce::PathStrokeType (3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        value.addCentredArc (c.x, c.y, ringRadius, ringRadius, 0.0f, startAngle, angle, true);
+        juce::DropShadow (accent.withAlpha (0.55f), (int) (ringWidth * 3.0f), {}).drawForPath (g, value);
+        if (onColour)
+            g.setColour (juce::Colours::white); // the big knob's ring sits on the coloured splash
+        else
+            g.setGradientFill (juce::ColourGradient (accent, c.x - ringRadius, c.y + ringRadius, accentLight,
+                                                     c.x + ringRadius, c.y - ringRadius, false));
+        g.strokePath (value, juce::PathStrokeType (ringWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 
-    // Cap with soft shadow
-    juce::Path cap;
-    cap.addEllipse (juce::Rectangle<float> (capRadius * 2.0f, capRadius * 2.0f).withCentre (c));
-    juce::DropShadow (juce::Colour (0x55102040), 14, { 0, 5 }).drawForPath (g, cap);
-    g.setGradientFill (juce::ColourGradient (juce::Colours::white, c.x, c.y - capRadius, juce::Colour (0xffdfe3e9),
-                                             c.x, c.y + capRadius, false));
-    g.fillPath (cap);
-    g.setColour (juce::Colour (0xffc9ced6));
-    g.strokePath (cap, juce::PathStrokeType (1.0f));
+    // Cast shadow, offset down as if lit from above
+    juce::Path body;
+    body.addEllipse (juce::Rectangle<float> (skirtRadius * 2.0f, skirtRadius * 2.0f).withCentre (c));
+    juce::DropShadow (juce::Colour (0x66101828), (int) (size * 0.16f), { 0, (int) (size * 0.07f) }).drawForPath (g, body);
+    juce::DropShadow (juce::Colour (0x33101828), (int) (size * 0.04f), { 0, (int) (size * 0.02f) }).drawForPath (g, body);
 
-    // Pointer
-    const auto inner = c.getPointOnCircumference (capRadius * 0.35f, angle);
-    const auto outer = c.getPointOnCircumference (capRadius * 0.85f, angle);
-    g.setColour (ink);
-    g.drawLine ({ inner, outer }, 2.5f);
+    // Knurled metal skirt: brushed silver, lighter at the top
+    auto skirt = knurledRing (c, skirtRadius, skirtRadius * 0.955f, size > 100 ? 48 : 32, angle);
+    juce::ColourGradient metal (juce::Colour (0xfff7f8fa), c.x, c.y - skirtRadius, juce::Colour (0xff8d939d),
+                                c.x, c.y + skirtRadius, false);
+    metal.addColour (0.45, juce::Colour (0xffd3d7dd));
+    metal.addColour (0.75, juce::Colour (0xffb0b5be));
+    g.setGradientFill (metal);
+    g.fillPath (skirt);
+    g.setColour (juce::Colour (0x40000000));
+    g.strokePath (skirt, juce::PathStrokeType (0.6f));
+
+    // Bevel between skirt and cap: dark below, light above
+    const auto bevel = juce::Rectangle<float> (capRadius * 2.12f, capRadius * 2.12f).withCentre (c);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff9aa0a9), c.x, bevel.getY(), juce::Colour (0xfffcfdfe),
+                                             c.x, bevel.getBottom(), false));
+    g.fillEllipse (bevel);
+
+    // Domed cap: off-centre radial gradient gives the curvature
+    const auto capBounds = juce::Rectangle<float> (capRadius * 2.0f, capRadius * 2.0f).withCentre (c);
+    juce::ColourGradient dome (juce::Colours::white, c.x - capRadius * 0.35f, c.y - capRadius * 0.45f,
+                               juce::Colour (0xffc9ced6), c.x + capRadius * 0.7f, c.y + capRadius * 0.9f, true);
+    dome.addColour (0.55, juce::Colour (0xffeef0f3));
+    g.setGradientFill (dome);
+    g.fillEllipse (capBounds);
+
+    // Specular highlight on the upper half
+    auto shine = capBounds.reduced (capRadius * 0.18f).withTrimmedBottom (capRadius * 0.85f).translated (0.0f, -capRadius * 0.05f);
+    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.85f), c.x, shine.getY(),
+                                             juce::Colours::white.withAlpha (0.0f), c.x, shine.getBottom(), false));
+    g.fillEllipse (shine);
+
+    g.setColour (juce::Colour (0x30000000));
+    g.drawEllipse (capBounds, 0.8f);
+
+    // Pointer: a groove cut into the cap (dark line with a light lower edge)
+    const auto inner = c.getPointOnCircumference (capRadius * 0.30f, angle);
+    const auto outer = c.getPointOnCircumference (capRadius * 0.88f, angle);
+    const float pointerWidth = juce::jmax (2.0f, size * 0.028f);
+    g.setColour (juce::Colours::white.withAlpha (0.9f));
+    g.drawLine ({ inner.translated (0.0f, 0.8f), outer.translated (0.0f, 0.8f) }, pointerWidth);
+    g.setColour (juce::Colour (0xff2b303a));
+    g.drawLine ({ inner.translated (0.0f, -0.6f), outer.translated (0.0f, -0.6f) }, pointerWidth);
 }
 
 FreezeEditor::FreezeEditor (FreezeProcessor& p)
@@ -78,6 +115,7 @@ FreezeEditor::FreezeEditor (FreezeProcessor& p)
     setupKnob (grain, "Grain", "grain");
     setupKnob (fx, "FX", "fx");
     amount.slider.onValueChange = [this] { updateLabel (amount); repaint(); };
+    amount.slider.getProperties().set ("onColour", true);
 
     for (auto* button : { &previous, &next })
     {
@@ -96,12 +134,19 @@ FreezeEditor::FreezeEditor (FreezeProcessor& p)
 
     // Shards scattered around the hexagon edge; fixed seed so the splash always looks the same.
     juce::Random rng (2026);
-    for (int i = 0; i < 70; ++i)
+    // Edge roughness: random values smoothed over neighbours, so the edge is chunky rather than hairy
+    std::vector<float> raw (160);
+    for (auto& v : raw)
+        v = rng.nextFloat() * 2.0f - 1.0f;
+    edgeNoise.resize (raw.size());
+    for (size_t i = 0; i < raw.size(); ++i)
+        edgeNoise[i] = 0.6f * raw[i] + 0.2f * raw[(i + 1) % raw.size()] + 0.2f * raw[(i + raw.size() - 1) % raw.size()];
+    for (int i = 0; i < 40; ++i)
     {
         const float a = rng.nextFloat() * juce::MathConstants<float>::twoPi;
         const float reach = rng.nextFloat();
-        const float dist = kSplashRadius * (0.85f + 0.55f * reach);
-        const float size = 3.0f + 9.0f * rng.nextFloat() * (1.0f - 0.6f * reach);
+        const float dist = kSplashRadius * (1.05f + 0.4f * reach);
+        const float size = 1.5f + 4.5f * rng.nextFloat() * (1.0f - 0.5f * reach);
         const auto centre = juce::Point<float>().getPointOnCircumference (dist, a);
         juce::Path tri;
         tri.addTriangle (centre.getPointOnCircumference (size, rng.nextFloat() * 6.28f),
@@ -183,30 +228,45 @@ void FreezeEditor::applyPresetColours()
 
 void FreezeEditor::drawSplash (juce::Graphics& g, juce::Point<float> c, float level) const
 {
-    const float grow = 0.82f + 0.18f * level;
-    auto hex = hexagon (c, kSplashRadius * grow);
-    g.setGradientFill (juce::ColourGradient (accentLight.withAlpha (0.55f + 0.45f * level), c.x - 70.0f, c.y - 70.0f,
-                                             accentDeep.withAlpha (0.45f + 0.55f * level), c.x + 70.0f, c.y + 80.0f, false));
-    g.fillPath (hex);
-
-    // Faint facets inside the hexagon
-    g.setColour (juce::Colours::white.withAlpha (0.12f + 0.1f * level));
-    for (int i = 0; i < 6; ++i)
+    // Organic disc: a slow wobble plus fine ragged edges that get rougher as the amount rises.
+    const float radius = kSplashRadius * (0.86f + 0.14f * level);
+    const float rough = 0.03f + 0.06f * level;
+    juce::Path blob;
+    const auto n = edgeNoise.size();
+    for (size_t i = 0; i <= n; ++i)
     {
-        const float a = juce::MathConstants<float>::pi / 3.0f * (float) i + juce::MathConstants<float>::pi / 6.0f;
-        g.drawLine ({ c, c.getPointOnCircumference (kSplashRadius * grow, a) }, 1.0f);
+        const float a = juce::MathConstants<float>::twoPi * (float) (i % n) / (float) n;
+        const float wobble = 0.045f * std::sin (3.0f * a + 0.7f) + 0.03f * std::sin (5.0f * a + 2.1f)
+                             + 0.02f * std::sin (9.0f * a + 4.0f);
+        const float r = radius * (1.0f + wobble + rough * edgeNoise[i % n]);
+        const auto pt = c.getPointOnCircumference (r, a);
+        i == 0 ? blob.startNewSubPath (pt) : blob.lineTo (pt);
     }
+    blob.closeSubPath();
 
-    // Shards break away further as the amount rises
+    // Soft coloured glow under the disc
+    juce::DropShadow (accent.withAlpha (0.35f + 0.3f * level), (int) (radius * 0.35f), { 0, 4 }).drawForPath (g, blob);
+
+    // Diagonal colour gradient: light at the top left, deep at the bottom right
+    juce::ColourGradient fill (accentLight, c.x - radius, c.y - radius, accentDeep, c.x + radius, c.y + radius, false);
+    fill.addColour (0.5, accent);
+    g.setGradientFill (fill);
+    g.fillPath (blob);
+
+    // Frosted centre light so the knob sits in a glow
+    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.45f), c.x, c.y - radius * 0.15f,
+                                             juce::Colours::white.withAlpha (0.0f), c.x, c.y + radius, true));
+    g.fillPath (blob);
+
+    // Icy specks breaking off the edge as the amount rises
     for (const auto& s : shards)
     {
-        const float visible = juce::jlimit (0.0f, 1.0f, (level * 1.3f - s.reach * 0.9f) * 2.0f + 0.25f);
+        const float visible = juce::jlimit (0.0f, 1.0f, (level * 1.3f - s.reach * 0.9f) * 2.0f);
         if (visible <= 0.0f)
             continue;
-        const float push = 1.0f + 0.12f * level * s.reach;
         auto shape = s.shape;
-        shape.applyTransform (juce::AffineTransform::scale (push).translated (c));
-        g.setColour (accent.interpolatedWith (accentLight, s.reach).withAlpha (s.alpha * visible));
+        shape.applyTransform (juce::AffineTransform::scale (1.0f + 0.1f * level * s.reach).translated (c));
+        g.setColour (accent.interpolatedWith (accentLight, s.reach).withAlpha (s.alpha * visible * 0.8f));
         g.fillPath (shape);
     }
 }
