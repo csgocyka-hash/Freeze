@@ -1,6 +1,7 @@
 #include "../Check.h"
 #include "../Signals.h"
 #include "PluginProcessor.h"
+#include "dsp/Presets.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 
 namespace
@@ -106,5 +107,96 @@ TEST (editor_opens)
     FreezeProcessor p;
     std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
     CHECK (editor != nullptr);
-    CHECK (editor->getWidth() > editor->getHeight() * 2); // wide one-knob rectangle
+    CHECK (editor->getWidth() > editor->getHeight()); // wide rectangle
+}
+
+namespace
+{
+float paramValue (FreezeProcessor& p, const char* id)
+{
+    return p.apvts.getRawParameterValue (id)->load();
+}
+
+void setParam (FreezeProcessor& p, const char* id, float value)
+{
+    auto* param = p.apvts.getParameter (id);
+    param->setValueNotifyingHost (param->convertTo0to1 (value));
+}
+} // namespace
+
+TEST (three_parameters_and_preset)
+{
+    FreezeProcessor p;
+    for (auto* id : { "freeze", "grain", "fx", "preset" })
+        CHECK (p.apvts.getParameter (id) != nullptr);
+    CHECK_NEAR (paramValue (p, "grain"), gf::grainSecondsToKnob (0.120), 1e-4); // Ice
+    CHECK_NEAR (paramValue (p, "fx"), 0.0, 1e-6);
+    CHECK_NEAR (paramValue (p, "preset"), 0.0, 1e-6);
+    auto* preset = dynamic_cast<juce::AudioParameterChoice*> (p.apvts.getParameter ("preset"));
+    CHECK (preset != nullptr && preset->choices.size() == 5 && preset->choices[2] == "Haze");
+}
+
+TEST (preset_sets_grain_and_fx)
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FreezeProcessor p;
+    setParam (p, "preset", 2.0f); // Haze
+    p.handleUpdateNowIfNeeded();
+    CHECK_NEAR (paramValue (p, "grain"), gf::grainSecondsToKnob (0.300), 1e-3);
+    CHECK_NEAR (paramValue (p, "fx"), 0.4, 1e-3);
+}
+
+TEST (programs_are_presets)
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FreezeProcessor p;
+    CHECK (p.getNumPrograms() == 5);
+    CHECK (p.getProgramName (4) == "Abyss");
+    p.setCurrentProgram (3);
+    p.handleUpdateNowIfNeeded();
+    CHECK (p.getCurrentProgram() == 3);
+    CHECK_NEAR (paramValue (p, "fx"), 0.35, 1e-3);
+}
+
+TEST (state_round_trip_all_params)
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FreezeProcessor a;
+    setParam (a, "preset", 4.0f);
+    a.handleUpdateNowIfNeeded();
+    setParam (a, "grain", 0.2f); // user tweaks after choosing the preset
+    setParam (a, "fx", 0.9f);
+    setParam (a, "freeze", 0.6f);
+    juce::MemoryBlock state;
+    a.getStateInformation (state);
+
+    FreezeProcessor b;
+    b.setStateInformation (state.getData(), (int) state.getSize());
+    b.handleUpdateNowIfNeeded(); // restoring must not reset grain/fx to the preset's starting values
+    CHECK_NEAR (paramValue (b, "preset"), 4.0, 1e-4);
+    CHECK_NEAR (paramValue (b, "grain"), 0.2, 1e-3);
+    CHECK_NEAR (paramValue (b, "fx"), 0.9, 1e-3);
+    CHECK_NEAR (paramValue (b, "freeze"), 0.6, 1e-3);
+}
+
+TEST (editor_has_three_knobs)
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FreezeProcessor p;
+    std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
+    int sliders = 0;
+    for (auto* child : editor->getChildren())
+        sliders += dynamic_cast<juce::Slider*> (child) != nullptr ? 1 : 0;
+    CHECK (sliders == 3);
+
+    // Big Amount knob in the middle, the two small knobs below it
+    juce::Slider* knobs[3] {};
+    int n = 0;
+    for (auto* child : editor->getChildren())
+        if (auto* s = dynamic_cast<juce::Slider*> (child))
+            knobs[n++] = s;
+    std::sort (std::begin (knobs), std::end (knobs), [] (auto* a, auto* b) { return a->getWidth() > b->getWidth(); });
+    CHECK (std::abs (knobs[0]->getBounds().getCentreX() - editor->getWidth() / 2) <= 1);
+    CHECK (knobs[1]->getY() > knobs[0]->getBottom() - 10);
+    CHECK (knobs[2]->getY() > knobs[0]->getBottom() - 10);
 }

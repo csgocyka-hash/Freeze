@@ -3,17 +3,20 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// Light knob with a soft shadow and a thin icy value ring.
+// Light knobs with a soft shadow and a thin value ring in the preset's accent colours.
 class FreezeLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
     void drawRotarySlider (juce::Graphics&, int x, int y, int width, int height, float sliderPos,
                            float startAngle, float endAngle, juce::Slider&) override;
+    void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour&, bool, bool) override {}
+
+    juce::Colour accent { 0xff4f9dff }, accentLight { 0xffa8e0ff };
 };
 
-// Wide one-knob panel: wordmark on the left, the Freeze knob in the middle over a shattered ice
-// splash that grows with the amount, and a snowflake on the right that lights up.
-class FreezeEditor : public juce::AudioProcessorEditor
+// Wide panel: wordmark and preset selector on top, the big Amount knob in the middle over an ice splash
+// that shatters as the amount rises, and the small Grain and FX knobs underneath. Colours follow the preset.
+class FreezeEditor : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
     explicit FreezeEditor (FreezeProcessor&);
@@ -26,20 +29,34 @@ private:
     struct Shard
     {
         juce::Path shape;
-        float reach;  // 0..1: how far out the shard sits, so outer shards appear later
+        float reach; // 0..1: how far out the shard sits, so outer shards appear later
         float alpha;
     };
 
+    struct Knob
+    {
+        juce::Slider slider;
+        juce::Label label;
+        juce::String name, paramId;
+        std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
+    };
+
+    void timerCallback() override;
+    void setupKnob (Knob&, const juce::String& name, const juce::String& paramId);
+    void updateLabel (Knob&);
+    void stepPreset (int delta);
+    void applyPresetColours();
     void drawSplash (juce::Graphics&, juce::Point<float> centre, float amount) const;
     void drawSnowflake (juce::Graphics&, juce::Point<float> centre, float radius, float amount) const;
-    void updateLabel();
 
     FreezeProcessor& freezeProcessor;
     FreezeLookAndFeel lookAndFeel;
-    juce::Slider knob;
-    juce::Label valueLabel;
-    juce::AudioProcessorValueTreeState::SliderAttachment attachment;
+    Knob amount, grain, fx;
+    juce::TextButton previous { juce::CharPointer_UTF8 ("\xe2\x80\xb9") }, next { juce::CharPointer_UTF8 ("\xe2\x80\xba") };
+    juce::Label presetName;
     std::vector<Shard> shards;
+    int shownPreset = -1;
+    juce::Colour accent, accentLight, accentDeep;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FreezeEditor)
 };
