@@ -8,20 +8,25 @@ const juce::Colour panelTop (0xfff4f5f7), panelBottom (0xffe2e5ea), ink (0xff3b4
 constexpr int kWidth = 560, kHeight = 330;
 constexpr float kSplashRadius = 86.0f;
 
-// Knurled metal skirt: a ring of rounded teeth, rotated with the knob so it reads as a physical part.
-juce::Path knurledRing (juce::Point<float> c, float outer, float inner, int teeth, float rotation)
+// Brushed metal: brightness varies around the circle like light on a turned metal surface. JUCE has no
+// conic gradient, so the ring is drawn as thin wedges.
+void fillBrushedMetal (juce::Graphics& g, juce::Point<float> c, float outer, float inner, float light)
 {
-    juce::Path p;
-    const int steps = teeth * 4;
-    for (int i = 0; i <= steps; ++i)
+    constexpr int segments = 120;
+    for (int i = 0; i < segments; ++i)
     {
-        const float a = rotation + juce::MathConstants<float>::twoPi * (float) i / (float) steps;
-        const float r = (i % 4 == 1 || i % 4 == 2) ? outer : inner;
-        const auto pt = c.getPointOnCircumference (r, a);
-        i == 0 ? p.startNewSubPath (pt) : p.lineTo (pt);
+        const float a0 = juce::MathConstants<float>::twoPi * (float) i / segments;
+        const float a1 = juce::MathConstants<float>::twoPi * (float) (i + 1) / segments;
+        const float mid = 0.5f * (a0 + a1);
+        // Two bright bands (top-left and bottom-right) and darker sides, plus overall top-down light
+        const float sheen = 0.5f + 0.5f * std::cos (2.0f * (mid + 0.6f));
+        const float topLight = 0.5f - 0.5f * std::cos (mid); // 0 at top (angle 0 = 12 o'clock), 1 at bottom
+        const float level = juce::jlimit (0.0f, 1.0f, light * (0.62f + 0.33f * sheen - 0.22f * topLight));
+        juce::Path wedge;
+        wedge.addPieSegment (juce::Rectangle<float> (outer * 2.0f, outer * 2.0f).withCentre (c), a0, a1 + 0.01f, inner / outer);
+        g.setColour (juce::Colour::greyLevel (level));
+        g.fillPath (wedge);
     }
-    p.closeSubPath();
-    return p;
 }
 } // namespace
 
@@ -29,9 +34,10 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
                                           float startAngle, float endAngle, juce::Slider& slider)
 {
     const bool onColour = slider.getProperties().getWithDefault ("onColour", false);
+    // Square knob area at the top of the component; the space below holds the body and its shadow
     const auto bounds = juce::Rectangle<int> (x, y, width, height).toFloat();
-    const auto c = bounds.getCentre();
     const float size = juce::jmin (bounds.getWidth(), bounds.getHeight());
+    const juce::Point<float> c (bounds.getCentreX(), bounds.getY() + size * 0.5f);
     const float ringRadius = size * 0.5f - 3.0f;          // value ring
     const float skirtRadius = ringRadius - size * 0.075f; // knurled metal edge
     const float capRadius = skirtRadius * 0.80f;          // domed top
@@ -57,22 +63,37 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
         g.strokePath (value, juce::PathStrokeType (ringWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 
-    // Cast shadow, offset down as if lit from above
-    juce::Path body;
-    body.addEllipse (juce::Rectangle<float> (skirtRadius * 2.0f, skirtRadius * 2.0f).withCentre (c));
-    juce::DropShadow (juce::Colour (0x66101828), (int) (size * 0.16f), { 0, (int) (size * 0.07f) }).drawForPath (g, body);
-    juce::DropShadow (juce::Colour (0x33101828), (int) (size * 0.04f), { 0, (int) (size * 0.02f) }).drawForPath (g, body);
+    // Height of the knob body (taller for the small knobs), drawn as a metal cylinder wall
+    const float bodyHeight = size * (float) slider.getProperties().getWithDefault ("height", 0.06);
+    const auto top = juce::Rectangle<float> (skirtRadius * 2.0f, skirtRadius * 2.0f).withCentre (c);
+    const auto bottom = top.translated (0.0f, bodyHeight);
 
-    // Knurled metal skirt: brushed silver, lighter at the top
-    auto skirt = knurledRing (c, skirtRadius, skirtRadius * 0.955f, size > 100 ? 48 : 32, angle);
-    juce::ColourGradient metal (juce::Colour (0xfff7f8fa), c.x, c.y - skirtRadius, juce::Colour (0xff8d939d),
-                                c.x, c.y + skirtRadius, false);
-    metal.addColour (0.45, juce::Colour (0xffd3d7dd));
-    metal.addColour (0.75, juce::Colour (0xffb0b5be));
-    g.setGradientFill (metal);
-    g.fillPath (skirt);
+    // Cast shadow under the body
+    juce::Path footprint;
+    footprint.addEllipse (bottom);
+    juce::DropShadow (juce::Colour (0x70101828), (int) (size * 0.14f), { 0, (int) (size * 0.05f) }).drawForPath (g, footprint);
+    juce::DropShadow (juce::Colour (0x40101828), (int) (size * 0.04f), { 0, (int) (size * 0.015f) }).drawForPath (g, footprint);
+
+    // Cylinder wall: dark at the sides, bright down the middle, like a turned metal barrel
+    juce::Path wall;
+    wall.addRectangle (top.getX(), c.y, top.getWidth(), bodyHeight);
+    wall.addEllipse (bottom);
+    juce::ColourGradient barrel (juce::Colour (0xff5f656f), top.getX(), 0.0f, juce::Colour (0xff5f656f), top.getRight(), 0.0f, false);
+    barrel.addColour (0.18, juce::Colour (0xffa9aeb6));
+    barrel.addColour (0.42, juce::Colour (0xffeef0f3));
+    barrel.addColour (0.55, juce::Colour (0xffc7cbd2));
+    barrel.addColour (0.85, juce::Colour (0xff8a9099));
+    g.setGradientFill (barrel);
+    g.fillPath (wall);
+    g.setColour (juce::Colour (0x50000000));
+    g.drawEllipse (bottom, 0.8f);
+
+    // Top face: smooth brushed-metal rim
+    fillBrushedMetal (g, c, skirtRadius, capRadius * 1.06f, 1.0f);
     g.setColour (juce::Colour (0x40000000));
-    g.strokePath (skirt, juce::PathStrokeType (0.6f));
+    g.drawEllipse (top, 0.8f);
+    g.setColour (juce::Colours::white.withAlpha (0.6f));
+    g.drawEllipse (top.reduced (1.0f), 0.6f);
 
     // Bevel between skirt and cap: dark below, light above
     const auto bevel = juce::Rectangle<float> (capRadius * 2.12f, capRadius * 2.12f).withCentre (c);
@@ -116,6 +137,9 @@ FreezeEditor::FreezeEditor (FreezeProcessor& p)
     setupKnob (fx, "FX", "fx");
     amount.slider.onValueChange = [this] { updateLabel (amount); repaint(); };
     amount.slider.getProperties().set ("onColour", true);
+    amount.slider.getProperties().set ("height", 0.05);
+    grain.slider.getProperties().set ("height", 0.20);
+    fx.slider.getProperties().set ("height", 0.20);
 
     for (auto* button : { &previous, &next })
     {
@@ -298,7 +322,8 @@ void FreezeEditor::paint (juce::Graphics& g)
     g.setColour (juce::Colour (0xffd5d9df));
     g.drawHorizontalLine (40, 12.0f, bounds.getRight() - 12.0f);
 
-    drawSplash (g, amount.slider.getBounds().toFloat().getCentre(), level);
+    const auto amountArea = amount.slider.getBounds().toFloat();
+    drawSplash (g, { amountArea.getCentreX(), amountArea.getY() + amountArea.getWidth() * 0.5f }, level);
 
     // Letter-spaced wordmark
     juce::GlyphArrangement word;
@@ -319,13 +344,12 @@ void FreezeEditor::resized()
     next.setBounds (presetName.getRight() + 2, 8, 26, 24);
 
     // Big Amount knob in the middle, Grain and FX side by side underneath it
-    amount.slider.setBounds (juce::Rectangle<int> (136, 136).withCentre ({ centreX, 132 }));
-    grain.slider.setBounds (juce::Rectangle<int> (66, 66).withCentre ({ centreX - 78, 262 }));
-    fx.slider.setBounds (juce::Rectangle<int> (66, 66).withCentre ({ centreX + 78, 262 }));
+    // Width sets the knob size; the extra height is room for the knob body and shadow
+    amount.slider.setBounds (centreX - 68, 64, 136, 152);
+    grain.slider.setBounds (centreX - 70 - 27, 236, 54, 72);
+    fx.slider.setBounds (centreX + 70 - 27, 236, 54, 72);
 
     for (auto* knob : { &amount, &grain, &fx })
         knob->label.setBounds (juce::Rectangle<int> (110, 20).withCentre ({ knob->slider.getBounds().getCentreX(),
-                                                                           knob->slider.getBottom() + 8 }));
-    // Below the splash rather than on its edge
-    amount.label.setTopLeftPosition (amount.label.getX(), amount.slider.getBottom() + 14);
+                                                                           knob->slider.getBottom() + 2 }));
 }
