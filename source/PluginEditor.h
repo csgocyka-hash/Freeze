@@ -11,7 +11,7 @@ public:
                            float startAngle, float endAngle, juce::Slider&) override;
     void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour&, bool, bool) override {}
 
-    juce::Colour accent { 0xff4f9dff }, accentLight { 0xffa8e0ff };
+    juce::Colour accent { 0xff4f9dff }, accentLight { 0xffa8e0ff }, accentDeep { 0xff2a55e6 };
 };
 
 // Wide panel: wordmark and preset selector on top, the big Amount knob in the middle over an ice splash

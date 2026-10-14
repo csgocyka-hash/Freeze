@@ -8,9 +8,9 @@ const juce::Colour panelTop (0xfff4f5f7), panelBottom (0xffe2e5ea), ink (0xff3b4
 constexpr int kWidth = 560, kHeight = 330;
 constexpr float kSplashRadius = 86.0f;
 
-// Brushed metal: brightness varies around the circle like light on a turned metal surface. JUCE has no
+// Satin rim: brightness varies gently around the circle like light on a turned surface. JUCE has no
 // conic gradient, so the ring is drawn as thin wedges.
-void fillBrushedMetal (juce::Graphics& g, juce::Point<float> c, float outer, float inner, float light)
+void fillSatinRing (juce::Graphics& g, juce::Point<float> c, float outer, float inner, float light)
 {
     constexpr int segments = 120;
     for (int i = 0; i < segments; ++i)
@@ -21,7 +21,7 @@ void fillBrushedMetal (juce::Graphics& g, juce::Point<float> c, float outer, flo
         // Two bright bands (top-left and bottom-right) and darker sides, plus overall top-down light
         const float sheen = 0.5f + 0.5f * std::cos (2.0f * (mid + 0.6f));
         const float topLight = 0.5f - 0.5f * std::cos (mid); // 0 at top (angle 0 = 12 o'clock), 1 at bottom
-        const float level = juce::jlimit (0.0f, 1.0f, light * (0.62f + 0.33f * sheen - 0.22f * topLight));
+        const float level = juce::jlimit (0.0f, 1.0f, light * (0.88f + 0.12f * sheen - 0.10f * topLight));
         juce::Path wedge;
         wedge.addPieSegment (juce::Rectangle<float> (outer * 2.0f, outer * 2.0f).withCentre (c), a0, a1 + 0.01f, inner / outer);
         g.setColour (juce::Colour::greyLevel (level));
@@ -74,22 +74,22 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
     juce::DropShadow (juce::Colour (0x70101828), (int) (size * 0.14f), { 0, (int) (size * 0.05f) }).drawForPath (g, footprint);
     juce::DropShadow (juce::Colour (0x40101828), (int) (size * 0.04f), { 0, (int) (size * 0.015f) }).drawForPath (g, footprint);
 
-    // Cylinder wall: dark at the sides, bright down the middle, like a turned metal barrel
+    // Cylinder wall: white, shaded at the sides so it reads as round
     juce::Path wall;
     wall.addRectangle (top.getX(), c.y, top.getWidth(), bodyHeight);
     wall.addEllipse (bottom);
-    juce::ColourGradient barrel (juce::Colour (0xff5f656f), top.getX(), 0.0f, juce::Colour (0xff5f656f), top.getRight(), 0.0f, false);
-    barrel.addColour (0.18, juce::Colour (0xffa9aeb6));
-    barrel.addColour (0.42, juce::Colour (0xffeef0f3));
-    barrel.addColour (0.55, juce::Colour (0xffc7cbd2));
-    barrel.addColour (0.85, juce::Colour (0xff8a9099));
+    juce::ColourGradient barrel (juce::Colour (0xffaab0b9), top.getX(), 0.0f, juce::Colour (0xff9ea4ae), top.getRight(), 0.0f, false);
+    barrel.addColour (0.15, juce::Colour (0xffdde0e5));
+    barrel.addColour (0.40, juce::Colour (0xffffffff));
+    barrel.addColour (0.60, juce::Colour (0xfff1f3f5));
+    barrel.addColour (0.88, juce::Colour (0xffc4c9d0));
     g.setGradientFill (barrel);
     g.fillPath (wall);
     g.setColour (juce::Colour (0x50000000));
     g.drawEllipse (bottom, 0.8f);
 
-    // Top face: smooth brushed-metal rim
-    fillBrushedMetal (g, c, skirtRadius, capRadius * 1.06f, 1.0f);
+    // Top face: smooth white rim with a soft sheen
+    fillSatinRing (g, c, skirtRadius, capRadius * 1.06f, 1.0f);
     g.setColour (juce::Colour (0x40000000));
     g.drawEllipse (top, 0.8f);
     g.setColour (juce::Colours::white.withAlpha (0.6f));
@@ -97,35 +97,51 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
 
     // Bevel between skirt and cap: dark below, light above
     const auto bevel = juce::Rectangle<float> (capRadius * 2.12f, capRadius * 2.12f).withCentre (c);
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff9aa0a9), c.x, bevel.getY(), juce::Colour (0xfffcfdfe),
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xffc2c7cf), c.x, bevel.getY(), juce::Colour (0xffffffff),
                                              c.x, bevel.getBottom(), false));
     g.fillEllipse (bevel);
 
-    // Domed cap: off-centre radial gradient gives the curvature
+    // Domed cap in light grey: off-centre radial gradient gives the curvature
     const auto capBounds = juce::Rectangle<float> (capRadius * 2.0f, capRadius * 2.0f).withCentre (c);
-    juce::ColourGradient dome (juce::Colours::white, c.x - capRadius * 0.35f, c.y - capRadius * 0.45f,
-                               juce::Colour (0xffc9ced6), c.x + capRadius * 0.7f, c.y + capRadius * 0.9f, true);
-    dome.addColour (0.55, juce::Colour (0xffeef0f3));
+    juce::ColourGradient dome (juce::Colour (0xfff3f4f6), c.x - capRadius * 0.35f, c.y - capRadius * 0.45f,
+                               juce::Colour (0xffaeb3bb), c.x + capRadius * 0.75f, c.y + capRadius * 0.95f, true);
+    dome.addColour (0.45, juce::Colour (0xffdfe2e6));
+    dome.addColour (0.8, juce::Colour (0xffc6cad1));
     g.setGradientFill (dome);
     g.fillEllipse (capBounds);
 
+    // Fine machined rings on the face
+    for (float r = capRadius * 0.15f; r < capRadius * 0.96f; r += juce::jmax (2.5f, capRadius * 0.07f))
+    {
+        g.setColour (juce::Colours::white.withAlpha (0.07f));
+        g.drawEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c), 0.5f);
+        g.setColour (juce::Colours::black.withAlpha (0.018f));
+        g.drawEllipse (juce::Rectangle<float> (r * 2.0f + 1.0f, r * 2.0f + 1.0f).withCentre (c), 0.5f);
+    }
+
     // Specular highlight on the upper half
-    auto shine = capBounds.reduced (capRadius * 0.18f).withTrimmedBottom (capRadius * 0.85f).translated (0.0f, -capRadius * 0.05f);
-    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.85f), c.x, shine.getY(),
+    auto shine = capBounds.reduced (capRadius * 0.2f).withTrimmedBottom (capRadius * 0.9f).translated (0.0f, -capRadius * 0.06f);
+    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.7f), c.x, shine.getY(),
                                              juce::Colours::white.withAlpha (0.0f), c.x, shine.getBottom(), false));
     g.fillEllipse (shine);
 
-    g.setColour (juce::Colour (0x30000000));
-    g.drawEllipse (capBounds, 0.8f);
+    // Rim of the cap: light edge at the top, shade at the bottom
+    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.9f), c.x, capBounds.getY(),
+                                             juce::Colour (0x40000000), c.x, capBounds.getBottom(), false));
+    g.drawEllipse (capBounds.reduced (0.5f), 1.0f);
 
-    // Pointer: a groove cut into the cap (dark line with a light lower edge)
-    const auto inner = c.getPointOnCircumference (capRadius * 0.30f, angle);
-    const auto outer = c.getPointOnCircumference (capRadius * 0.88f, angle);
-    const float pointerWidth = juce::jmax (2.0f, size * 0.028f);
-    g.setColour (juce::Colours::white.withAlpha (0.9f));
-    g.drawLine ({ inner.translated (0.0f, 0.8f), outer.translated (0.0f, 0.8f) }, pointerWidth);
-    g.setColour (juce::Colour (0xff2b303a));
-    g.drawLine ({ inner.translated (0.0f, -0.6f), outer.translated (0.0f, -0.6f) }, pointerWidth);
+    // Triangle pointer near the edge of the cap, sunk into the face: shadow above, light below
+    const float halfWidth = juce::jmax (3.5f, capRadius * 0.17f);
+    const float tip = capRadius * 0.88f, base = tip - halfWidth * 1.75f;
+    juce::Path triangle;
+    triangle.addTriangle (0.0f, -tip, -halfWidth, -base, halfWidth, -base);
+    triangle.applyTransform (juce::AffineTransform::rotation (angle).translated (c));
+    g.setColour (juce::Colours::white.withAlpha (0.8f));
+    g.fillPath (triangle, juce::AffineTransform::translation (0.0f, 0.9f));
+    g.setColour (juce::Colour (0x66000000));
+    g.fillPath (triangle, juce::AffineTransform::translation (0.0f, -0.7f));
+    g.setGradientFill (juce::ColourGradient (accentDeep, c.x, c.y - capRadius, accent, c.x, c.y + capRadius, false));
+    g.fillPath (triangle);
 }
 
 FreezeEditor::FreezeEditor (FreezeProcessor& p)
@@ -242,6 +258,7 @@ void FreezeEditor::applyPresetColours()
     accentDeep = juce::Colour (preset.accentDeep);
     lookAndFeel.accent = accent;
     lookAndFeel.accentLight = accentLight;
+    lookAndFeel.accentDeep = accentDeep;
 
     presetName.setText (preset.name, juce::dontSendNotification);
     presetName.setColour (juce::Label::textColourId, ink);
