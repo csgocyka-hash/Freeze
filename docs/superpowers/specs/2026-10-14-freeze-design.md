@@ -154,3 +154,54 @@ Plugin-level: pluginval strictness 5 in CI (macOS + Windows).
 
 Success is judged by ear on `render --test-pluck` and your own audio, then in
 a DAW on whichever machine has one.
+
+## Rev 7 (2026-10-14): three knobs, presets, reverb and delay
+
+Requested by the user during implementation; replaces "one parameter" and "presets out of scope".
+
+**Changes from earlier sections (as built):**
+- Grains are centred on the chosen loud segment (start = position − L/2), so
+  the Hann peak lands on the loud material. The newest `ceil(L/2 / 10 ms)`
+  segments are excluded so a grain never reads past the write head.
+- The gap test measures residual pluck rhythm (level folded over the 250 ms
+  pluck period: quietest bin ≥ 60 % of the mean) and requires every 10 ms
+  window above −30 dB. Granulating a steady tone makes single windows wander
+  at random, so a −20 dB per-window bound is not meaningful.
+
+**Parameters** (all automatable, saved with the project):
+
+| ID | Name | Range | Default |
+|---|---|---|---|
+| `freeze` | Amount | 0–100 % | 0 % |
+| `grain` | Grain | 0–100 % → grain length 40–500 ms, logarithmic | preset |
+| `fx` | FX | 0–100 % | preset |
+| `preset` | Preset | Ice, Glass, Haze, Ember, Abyss | Ice |
+
+- Grain spacing = grain length / preset density, so overlap (and therefore level and
+  smoothness) stays constant while the knob moves. Wet gain = `1/sqrt(density·0.375)`.
+  Each grain keeps the length it was spawned with, so knob moves never click.
+- FX: `wetOut = (wet + fx·effects(wet)) / sqrt(1 + fx²)`, where
+  `effects = reverbLevel·reverb(wet) + delayLevel·delay(wet)` from the preset.
+  Applied to the frozen signal only, before the Amount crossfade, so Amount 0 %
+  is still bit-identical pass-through. While bypassed (Amount 0 for a whole block)
+  the FX state is cleared too.
+- Reverb: JUCE-free Freeverb-style network (8 damped combs + 4 allpasses per
+  channel, right channel offset by 23 samples). Delay: feedback delay with a
+  one-pole low-pass in the loop; delay time glides over 50 ms on preset change.
+- Choosing a preset sets Grain and FX to the preset's starting values (on the
+  message thread). Presets are also exposed as host programs.
+
+**Presets:**
+
+| Preset | Accent colours | Grain start | Density | FX start | Reverb (size, damp, level) | Delay (time, feedback, level) |
+|---|---|---|---|---|---|---|
+| Ice | blue | 120 ms | 6 | 0 % | 0.5, 0.3, 1.0 | — |
+| Glass | cyan | 50 ms | 10 | 20 % | 0.6, 0.1, 1.0 | — |
+| Haze | violet | 300 ms | 6 | 40 % | 0.85, 0.5, 1.0 | — |
+| Ember | orange | 180 ms | 4 | 35 % | 0.5, 0.4, 0.4 | 300 ms, 0.45, 0.8 |
+| Abyss | indigo | 500 ms | 4 | 70 % | 0.95, 0.6, 1.0 | 600 ms, 0.55, 0.6 |
+
+**UI:** wide panel (~620×250). Top: letter-spaced FREEZE wordmark (left) and a
+`‹ Preset ›` selector (centre). Middle: big Amount knob over the ice splash.
+Left: Grain knob, right: FX knob (smaller, same style, coloured labels). The
+splash, value rings, labels and snowflake take the preset's accent colours.
