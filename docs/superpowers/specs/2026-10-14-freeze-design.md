@@ -111,7 +111,7 @@ allocation, locks, or I/O in `process`.
 
 ## UI
 
-Plain JUCE editor, ~240×260 px: title "Freeze" with a small "by fouren", one large rotary knob
+Plain JUCE editor, ~240×260 px: title "Freeze", one large rotary knob
 labelled "Freeze" showing 0–100 %, APVTS slider attachment. Custom styling is
 out of scope for v1.
 
