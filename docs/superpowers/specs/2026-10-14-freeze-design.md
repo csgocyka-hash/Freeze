@@ -30,8 +30,9 @@ from any other plugin. The workflow is built for a Mac **without a DAW and
 without admin rights**.
 
 - C++17, JUCE 8.0.15 cloned into `external/JUCE` by `scripts/setup.sh`.
-- Plugin (product) name **"Freeze"**; company name "Freeze" (changeable),
-  manufacturer code `FrzP`, plugin code `Frz1`, bundle id `com.freezeplugin.freeze`.
+- **"Freeze" by fouren**: product name "Freeze", company name "fouren",
+  manufacturer code `Fren` (the same code for every fouren plugin, so hosts
+  group them together), plugin code `Frz1`, bundle id `com.fouren.freeze`.
   CMake target `Freeze`.
 - Formats: **VST3 + Standalone**. On macOS the VST3 is copied to
   `~/Library/Audio/Plug-Ins/VST3` after build (not on Windows).
@@ -110,7 +111,7 @@ allocation, locks, or I/O in `process`.
 
 ## UI
 
-Plain JUCE editor, ~240×260 px: title "Freeze", one large rotary knob
+Plain JUCE editor, ~240×260 px: title "Freeze" with a small "by fouren", one large rotary knob
 labelled "Freeze" showing 0–100 %, APVTS slider attachment. Custom styling is
 out of scope for v1.
 
