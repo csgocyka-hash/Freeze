@@ -1,0 +1,70 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch JUCE
+        run: git clone --depth 1 --branch 8.0.15 https://github.com/juce-framework/JUCE.git external/JUCE
+
+      - name: Configure (macOS, universal binary)
+        if: runner.os == 'macOS'
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: cmake -S . -B build
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Unit tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: pluginval (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          curl -sL -o pv.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_macOS.zip
+          unzip -q pv.zip
+          pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --validate-in-process "build/Freeze_artefacts/Release/VST3/Freeze.vst3"
+
+      - name: pluginval (Windows)
+        if: runner.os == 'Windows'
+        # bash, not PowerShell: PowerShell does not wait for windowed apps like pluginval to exit
+        shell: bash
+        run: |
+          curl -sL -o pv.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip
+          unzip -q pv.zip -d pv
+          ./pv/pluginval.exe --strictness-level 5 "build/Freeze_artefacts/Release/VST3/Freeze.vst3"
+
+      - name: Package
+        shell: bash
+        run: |
+          version=$(sed -n 's/project(Freeze VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          stage="dist/Freeze $version"
+          mkdir -p "$stage"
+          cp -R "build/Freeze_artefacts/Release/VST3/Freeze.vst3" "$stage/"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            printf 'Freeze %s (VST3, Windows 10+, 64-bit)\r\n\r\n1. Move Freeze.vst3 into C:\\Program Files\\Common Files\\VST3\r\n2. Open your DAW and rescan plugins. Freeze is listed under "fouren".\r\n' "$version" > "$stage/Install.txt"
+            (cd dist && 7z a -tzip "Freeze-$version-windows.zip" "Freeze $version" > /dev/null)
+          else
+            printf 'Freeze %s (VST3, macOS 11+, Apple silicon and Intel)\n\n1. Move Freeze.vst3 into ~/Library/Audio/Plug-Ins/VST3\n2. Freeze is not signed by Apple yet. In Terminal run:\n   xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/Freeze.vst3\n3. Open your DAW and rescan plugins. Freeze is listed under "fouren".\n' "$version" > "$stage/Install.txt"
+            (cd dist && ditto -c -k --norsrc --noextattr --noqtn --keepParent "Freeze $version" "Freeze-$version-mac.zip")
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Freeze-download-${{ runner.os }}
+          path: dist/*.zip
