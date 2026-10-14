@@ -1,4 +1,4 @@
-# Grain Freeze — Design Spec
+# Freeze — Design Spec
 
 Date: 2026-10-14
 
@@ -30,8 +30,9 @@ from any other plugin. The workflow is built for a Mac **without a DAW and
 without admin rights**.
 
 - C++17, JUCE 8.0.15 cloned into `external/JUCE` by `scripts/setup.sh`.
-- Product and company name "Grain Freeze", manufacturer code `GrFz`,
-  plugin code `Gfrz`, bundle id `com.grainfreeze.plugin`.
+- Plugin (product) name **"Freeze"**; company name "Freeze" (changeable),
+  manufacturer code `FrzP`, plugin code `Frz1`, bundle id `com.freezeplugin.freeze`.
+  CMake target `Freeze`.
 - Formats: **VST3 + Standalone**. On macOS the VST3 is copied to
   `~/Library/Audio/Plug-Ins/VST3` after build (not on Windows).
 - Buses: mono→mono, stereo→stereo.
@@ -42,11 +43,11 @@ without admin rights**.
 ## Architecture
 
 ```
-grain-freeze/
+freeze/
 ├── CMakeLists.txt            # dsp lib + tests always; plugin/render/snapshot behind GF_BUILD_PLUGIN
 ├── scripts/setup.sh          # venv with cmake + ninja, clone JUCE 8.0.15 (no admin)
 ├── scripts/build.sh          # configure, build, run tests (--no-plugin for DSP only)
-├── scripts/package-mac.sh    # universal VST3 -> dist/GrainFreeze-<ver>-mac.zip
+├── scripts/package-mac.sh    # universal VST3 -> dist/Freeze-<ver>-mac.zip
 ├── source/
 │   ├── dsp/
 │   │   ├── Random.h          # seeded xoshiro PRNG
@@ -109,7 +110,7 @@ allocation, locks, or I/O in `process`.
 
 ## UI
 
-Plain JUCE editor, ~240×260 px: title "Grain Freeze", one large rotary knob
+Plain JUCE editor, ~240×260 px: title "Freeze", one large rotary knob
 labelled "Freeze" showing 0–100 %, APVTS slider attachment. Custom styling is
 out of scope for v1.
 
@@ -123,12 +124,12 @@ out of scope for v1.
   - `--in file.wav` for your own audio;
   - `--freeze 0..1` (default 1) or `--sweep` (knob ramps 0 → 1 over the file);
   - writes `renders/00 Dry.wav` plus the processed WAV, so you can A/B.
-- **Live:** the Standalone app (`build/GrainFreeze_artefacts/Release/Standalone/`)
+- **Live:** the Standalone app (`build/Freeze_artefacts/Release/Standalone/`)
   with your mic or audio interface input.
 - **UI check:** `snapshot` renders the editor to a PNG.
 - **Windows:** push to GitHub; the workflow builds on macOS (universal) and
   Windows, runs unit tests and pluginval (strictness 5), and uploads
-  `GrainFreeze-<ver>-windows.zip` / `-mac.zip` with an Install.txt each.
+  `Freeze-<ver>-windows.zip` / `-mac.zip` with an Install.txt each.
 
 ## Testing
 
