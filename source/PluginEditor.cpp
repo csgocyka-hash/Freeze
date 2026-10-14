@@ -266,4 +266,6 @@ void FreezeEditor::resized()
     for (auto* knob : { &amount, &grain, &fx })
         knob->label.setBounds (juce::Rectangle<int> (110, 20).withCentre ({ knob->slider.getBounds().getCentreX(),
                                                                            knob->slider.getBottom() + 8 }));
+    // Below the splash rather than on its edge
+    amount.label.setTopLeftPosition (amount.label.getX(), amount.slider.getBottom() + 14);
 }

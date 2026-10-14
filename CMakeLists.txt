@@ -69,3 +69,22 @@ if(GF_BUILD_PLUGIN)
         PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
     add_test(NAME freeze_plugin_tests COMMAND freeze_plugin_tests)
 endif()
+
+if(GF_BUILD_PLUGIN)
+    # Offline renderer: hear the effect without a DAW
+    juce_add_console_app(render PRODUCT_NAME "render")
+    target_sources(render PRIVATE tools/render/main.cpp)
+    target_compile_definitions(render PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_link_libraries(render
+        PRIVATE freeze_dsp juce::juce_audio_formats juce::juce_audio_basics juce::juce_core
+        PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+
+    # UI snapshot: renders the editor to PNG
+    juce_add_console_app(snapshot PRODUCT_NAME "snapshot")
+    target_sources(snapshot PRIVATE tools/snapshot/main.cpp ${GF_PLUGIN_SOURCES})
+    target_include_directories(snapshot PRIVATE source)
+    target_compile_definitions(snapshot PRIVATE ${GF_JUCE_DEFINES} JucePlugin_Name="Freeze")
+    target_link_libraries(snapshot
+        PRIVATE freeze_dsp juce::juce_audio_utils
+        PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+endif()
