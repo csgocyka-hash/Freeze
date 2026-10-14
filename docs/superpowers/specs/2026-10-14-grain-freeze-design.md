@@ -13,7 +13,9 @@ signal to a granular "freeze" cloud built from the recent input.
   continuous sustained tone with the input's pitch/timbre, no audible rhythm.
 - No clicks or level jumps when turning the knob or during steady playback.
 - At 0%, output equals input exactly.
-- Builds as VST3 on macOS and Windows from one codebase.
+- Builds as VST3 on macOS (locally) and Windows (GitHub Actions) from one
+  codebase, and passes pluginval.
+- Can be heard and checked without a DAW (render tool + Standalone).
 
 ## Scope
 
@@ -21,23 +23,35 @@ In: VST3, macOS + Windows, stereo (mono also works), one parameter, minimal UI.
 Out (v1): AU/CLAP/AAX, presets, extra parameters (grain size, density, pitch),
 custom graphics, tempo sync, MIDI.
 
-## Tech
+## Tech and workflow (same as DRiFT / `pitch-drift`)
 
-- C++17, JUCE 8 fetched via CMake `FetchContent` (pinned tag).
-- CMake project; generators: Xcode / Ninja on macOS, Visual Studio on Windows.
-- Plugin name "Grain Freeze", format VST3 only.
-- Tests: Catch2 v3 via `FetchContent`, run with CTest.
+- C++17, JUCE 8.0.15 cloned into `external/JUCE` by `scripts/setup.sh`.
+- Company "fouren", manufacturer code `Fren`, plugin code `GrFz`,
+  bundle id `com.fouren.grainfreeze`. Product name "Grain Freeze".
+- Formats: **VST3 + Standalone**. On macOS the VST3 is copied to
+  `~/Library/Audio/Plug-Ins/VST3` after build (not on Windows).
+- Buses: mono→mono, stereo→stereo.
+- Tests: the same tiny JUCE-free `Check.h` / `TestMain.cpp` harness as DRiFT,
+  one test executable run by CTest. No Catch2.
 
 ## Architecture
 
 ```
-Source/
-  FreezeEngine.h/.cpp   pure C++ DSP, no JUCE dependency, unit-tested
-  PluginProcessor.h/.cpp JUCE AudioProcessor: parameter, smoothing, calls engine
-  PluginEditor.h/.cpp   one rotary slider bound to the parameter
-Tests/
-  FreezeEngineTests.cpp
-CMakeLists.txt
+grain-freeze/
+├── CMakeLists.txt            # dsp lib + tests always; plugin/render/snapshot behind GF_BUILD_PLUGIN
+├── scripts/setup.sh          # venv with cmake + ninja, clone JUCE 8.0.15 (no admin)
+├── scripts/build.sh          # configure, build, run tests (--no-plugin for DSP only)
+├── scripts/package-mac.sh    # universal VST3 -> dist/GrainFreeze-<ver>-mac.zip
+├── source/
+│   ├── dsp/
+│   │   ├── Random.h          # seeded xoshiro PRNG
+│   │   └── FreezeEngine.h/.cpp  # JUCE-free, unit tested
+│   ├── PluginProcessor.h/.cpp
+│   └── PluginEditor.h/.cpp
+├── tools/render/main.cpp     # offline render CLI
+├── tools/snapshot/main.cpp   # editor -> PNG
+├── tests/                    # Check.h, TestMain.cpp, test_*.cpp
+└── .github/workflows/build.yml  # macOS + Windows build, tests, pluginval, zips
 ```
 
 `FreezeEngine` interface:
@@ -46,12 +60,15 @@ CMakeLists.txt
 - `reset()` — clears buffers and grains.
 - `process(float* const* channels, int numChannels, int numSamples, const float* freezeAmount)`
   — in-place; `freezeAmount` is the per-sample smoothed knob value (0..1).
-- `setSeed(uint32_t)` — deterministic RNG for tests.
+- `setSeed(uint64_t)` — deterministic RNG for tests and renders.
+
+Grain scheduling and segment analysis run on an absolute sample counter, so
+output is identical for any host block size.
 
 `PluginProcessor` owns the `AudioProcessorValueTreeState` with one float
 parameter `freeze` (0..1, default 0, displayed as 0–100 %), smooths it with a
 50 ms linear `SmoothedValue`, fills a per-sample amount array, and calls the
-engine. Reported latency: 0. State save/restore via the value tree.
+engine. Reported latency: 0. `ScopedNoDenormals`. State saved as APVTS XML.
 
 ## DSP (per channel)
 
@@ -88,7 +105,25 @@ allocation, locks, or I/O in `process`.
 ## UI
 
 Plain JUCE editor, ~240×260 px: title "Grain Freeze", one large rotary knob
-labelled "Freeze" showing 0–100 %. Uses an APVTS slider attachment.
+labelled "Freeze" showing 0–100 %, APVTS slider attachment. (Styling can be
+matched to DRiFT later; out of scope for v1.)
+
+## Dev environment (no admin, no DAW)
+
+- `scripts/setup.sh` once, then `scripts/build.sh` builds everything and runs
+  the tests.
+- **Listening:** the `render` CLI:
+  - `--test-pluck` — built-in 8 s pluck rhythm (decaying saw notes of a short
+    chord progression, 4 per second, silence between);
+  - `--in file.wav` for your own audio;
+  - `--freeze 0..1` (default 1) or `--sweep` (knob ramps 0 → 1 over the file);
+  - writes `renders/00 Dry.wav` plus the processed WAV, so you can A/B.
+- **Live:** the Standalone app (`build/GrainFreeze_artefacts/Release/Standalone/`)
+  with your mic or audio interface input.
+- **UI check:** `snapshot` renders the editor to a PNG.
+- **Windows:** push to GitHub; the workflow builds on macOS (universal) and
+  Windows, runs unit tests and pluginval (strictness 5), and uploads
+  `GrainFreeze-<ver>-windows.zip` / `-mac.zip` with an Install.txt each.
 
 ## Testing
 
@@ -101,10 +136,14 @@ Unit tests on `FreezeEngine` (fixed seed, 48 kHz):
   in the silent section is still within 6 dB of the earlier wet RMS.
 - **Level:** wet RMS within ±4 dB of the input's sounding-segment RMS.
 - **No clicks:** max sample-to-sample difference of the wet output on a sine
-  input stays below a bound derived from the sine's own max slope × 4.
+  input stays below 4 × the sine's own max slope.
 - **Silence in → silence out:** with no prior input, output is all zeros.
-- **Knob sweep:** ramping amount 0→1 over 1 s produces no sample-diff spikes
-  beyond the bound above.
+- **Knob sweep:** ramping amount 0→1 over 1 s stays within the same click bound.
+- **Determinism:** same seed → identical output.
+- **Block-size independence:** block sizes 1, 64 and 512 give identical output.
+- **Stability:** 60 s of noise at amount 1 → no NaN/Inf, bounded peak.
 
-Manual: load the VST3 in a DAW on macOS and Windows, run a pluck loop, sweep
-the knob, check CPU and saving/reloading the project.
+Plugin-level: pluginval strictness 5 in CI (macOS + Windows).
+
+Success is judged by ear on `render --test-pluck` and your own audio, then in
+a DAW on whichever machine has one.
