@@ -23,16 +23,21 @@ In: VST3, macOS + Windows, stereo (mono also works), one parameter, minimal UI.
 Out (v1): AU/CLAP/AAX, presets, extra parameters (grain size, density, pitch),
 custom graphics, tempo sync, MIDI.
 
-## Tech and workflow (same as DRiFT / `pitch-drift`)
+## Tech and workflow
+
+A standalone project written from scratch: no code, assets or files are taken
+from any other plugin. The workflow is built for a Mac **without a DAW and
+without admin rights**.
 
 - C++17, JUCE 8.0.15 cloned into `external/JUCE` by `scripts/setup.sh`.
-- Company "fouren", manufacturer code `Fren`, plugin code `GrFz`,
-  bundle id `com.fouren.grainfreeze`. Product name "Grain Freeze".
+- Product and company name "Grain Freeze", manufacturer code `GrFz`,
+  plugin code `Gfrz`, bundle id `com.grainfreeze.plugin`.
 - Formats: **VST3 + Standalone**. On macOS the VST3 is copied to
   `~/Library/Audio/Plug-Ins/VST3` after build (not on Windows).
 - Buses: mono→mono, stereo→stereo.
-- Tests: the same tiny JUCE-free `Check.h` / `TestMain.cpp` harness as DRiFT,
-  one test executable run by CTest. No Catch2.
+- Tests: a tiny JUCE-free test harness (`Check.h` with `TEST`/`CHECK`
+  macros, `TestMain.cpp` runner), one test executable run by CTest. No external
+  test framework to download.
 
 ## Architecture
 
@@ -105,8 +110,8 @@ allocation, locks, or I/O in `process`.
 ## UI
 
 Plain JUCE editor, ~240×260 px: title "Grain Freeze", one large rotary knob
-labelled "Freeze" showing 0–100 %, APVTS slider attachment. (Styling can be
-matched to DRiFT later; out of scope for v1.)
+labelled "Freeze" showing 0–100 %, APVTS slider attachment. Custom styling is
+out of scope for v1.
 
 ## Dev environment (no admin, no DAW)
 
