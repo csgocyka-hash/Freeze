@@ -1,6 +1,7 @@
 #pragma once
 // Granular freeze: records the recent sounding input and plays it back as a cloud of overlapping grains.
 // JUCE-free and real-time safe: everything is allocated in prepare().
+#include "Fx.h"
 #include "Random.h"
 #include <cmath>
 #include <cstdint>
@@ -11,14 +12,16 @@ namespace gf
 constexpr double kBufferSeconds = 2.0;
 constexpr double kSegmentSeconds = 0.010;
 constexpr float kSilenceRms = 0.001f; // -60 dBFS
-constexpr double kGrainSeconds = 0.120;
-constexpr double kSpawnSeconds = 0.020;
+constexpr double kGrainSeconds = 0.120; // default grain length
+constexpr double kDensity = 6.0;         // default overlap: spacing = grain length / density
 constexpr double kSpawnJitter = 0.25;
-constexpr int kMaxGrains = 16;
+// Longest gap between grain starts. Long grains on short plucks would otherwise replay whole
+// plucks with near-silence between them, so long grains overlap more instead.
+constexpr double kMaxSpacingSeconds = 0.040;
+constexpr int kMaxGrains = 32;
+constexpr int kWindowTableSize = 4096;
 constexpr double kSelectSeconds = 1.0;
 constexpr float kSelectThreshold = 0.25f;
-// Power-sum normalisation for uncorrelated Hann grains at (grain / spawn) overlap.
-inline const float kWetGain = (float) (1.0 / std::sqrt ((kGrainSeconds / kSpawnSeconds) * 0.375));
 
 class FreezeEngine
 {
@@ -27,8 +30,14 @@ public:
     void reset();
     void setSeed (uint64_t newSeed);
 
-    // In place. freezeAmount holds the smoothed knob value (0..1) for each sample.
-    void process (float* const* channels, int numChannels, int numSamples, const float* freezeAmount);
+    // New grains use these; grains already playing keep their length.
+    void setGrainSeconds (double seconds);
+    void setDensity (double grainsOverlapping);
+    void setFxCharacter (const FxCharacter& character);
+
+    // In place. freezeAmount and fxAmount hold smoothed knob values (0..1) per sample; fxAmount may be null.
+    void process (float* const* channels, int numChannels, int numSamples, const float* freezeAmount,
+                  const float* fxAmount = nullptr);
 
     // Total samples committed to the capture buffer of a channel since reset().
     int64_t recordedSamples (int channel) const;
@@ -38,6 +47,8 @@ private:
     {
         int64_t start = 0; // absolute index into the committed material
         int age = 0;       // samples played so far
+        int length = 0;
+        float gain = 1.0f; // brings the grain to the recent input level
         bool active = false;
     };
 
@@ -56,11 +67,15 @@ private:
     void spawnGrain (Channel& c);
     float renderGrains (Channel& c);
     int nextSpawnInterval (Channel& c);
+    double spacingSeconds() const;
 
     double sampleRate = 48000.0;
     int segmentLength = 480;
     int bufferSegments = 200;
-    int grainLength = 5760;
+    double grainSeconds = kGrainSeconds;
+    double density = kDensity;
+    bool bypassed = false;
+    FxChain fx;
     int stagingFill = 0;
     int64_t sampleCounter = 0;
     std::vector<float> window;

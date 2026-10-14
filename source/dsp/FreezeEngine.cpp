@@ -14,11 +14,11 @@ void FreezeEngine::prepare (double newSampleRate, int /*maxBlockSize*/, int numC
     sampleRate = newSampleRate;
     segmentLength = std::max (1, (int) std::lround (kSegmentSeconds * sampleRate));
     bufferSegments = (int) std::ceil (kBufferSeconds / kSegmentSeconds);
-    grainLength = std::max (2, (int) std::lround (kGrainSeconds * sampleRate));
 
-    window.resize ((size_t) grainLength);
-    for (int i = 0; i < grainLength; ++i)
-        window[(size_t) i] = (float) (0.5 - 0.5 * std::cos (kTwoPi * i / (grainLength - 1)));
+    window.resize (kWindowTableSize + 1);
+    for (int i = 0; i <= kWindowTableSize; ++i)
+        window[(size_t) i] = (float) (0.5 - 0.5 * std::cos (kTwoPi * i / kWindowTableSize));
+    fx.prepare (sampleRate, numChannels);
 
     channelState.assign ((size_t) std::max (1, numChannels), Channel {});
     for (auto& c : channelState)
@@ -34,6 +34,8 @@ void FreezeEngine::reset()
 {
     stagingFill = 0;
     sampleCounter = 0;
+    bypassed = false;
+    fx.reset();
     for (size_t ch = 0; ch < channelState.size(); ++ch)
     {
         auto& c = channelState[ch];
@@ -53,6 +55,21 @@ void FreezeEngine::setSeed (uint64_t newSeed)
 {
     seed = newSeed;
     reset();
+}
+
+void FreezeEngine::setGrainSeconds (double seconds)
+{
+    grainSeconds = std::clamp (seconds, 0.040, 0.500);
+}
+
+void FreezeEngine::setDensity (double grainsOverlapping)
+{
+    density = std::clamp (grainsOverlapping, 2.0, 16.0);
+}
+
+void FreezeEngine::setFxCharacter (const FxCharacter& character)
+{
+    fx.setCharacter (character);
 }
 
 int64_t FreezeEngine::recordedSamples (int channel) const
@@ -77,14 +94,21 @@ void FreezeEngine::commitSegment (Channel& c)
     ++c.committedSegments;
 }
 
+double FreezeEngine::spacingSeconds() const
+{
+    return std::min (grainSeconds / density, kMaxSpacingSeconds);
+}
+
 int FreezeEngine::nextSpawnInterval (Channel& c)
 {
     const double jitter = 1.0 + kSpawnJitter * (2.0 * c.random.uniform() - 1.0);
-    return std::max (1, (int) std::lround (kSpawnSeconds * sampleRate * jitter));
+    return std::max (1, (int) std::lround (spacingSeconds() * sampleRate * jitter));
 }
 
 void FreezeEngine::spawnGrain (Channel& c)
 {
+    const int grainLength = std::max (2, (int) std::lround (grainSeconds * sampleRate));
+
     // Candidates: segments from the last kSelectSeconds of committed material, leaving out the newest
     // ones so that a whole grain fits before the write head.
     const int64_t excluded = (grainLength / 2 + segmentLength - 1) / segmentLength;
@@ -95,8 +119,14 @@ void FreezeEngine::spawnGrain (Channel& c)
         return;
 
     float loudest = 0.0f;
+    double sumSquares = 0.0;
     for (int64_t s = first; s < last; ++s)
-        loudest = std::max (loudest, c.energy[(size_t) (s % bufferSegments)]);
+    {
+        const float e = c.energy[(size_t) (s % bufferSegments)];
+        loudest = std::max (loudest, e);
+        sumSquares += (double) e * e;
+    }
+    const double targetRms = std::sqrt (sumSquares / (double) (last - first));
 
     // Pick uniformly among the segments loud enough (favours attacks and bodies over quiet tails).
     const float threshold = kSelectThreshold * loudest;
@@ -127,7 +157,22 @@ void FreezeEngine::spawnGrain (Channel& c)
     }
 
     voice->start = chosen * segmentLength + c.random.below (segmentLength) - grainLength / 2;
+
+    // Level-match the grain: its windowed RMS is brought towards the recent input level (within +-6 dB),
+    // so short grains on loud attacks are not louder than long grains over whole notes.
+    const auto capacity = (int64_t) c.buffer.size();
+    double grainSquares = 0.0, windowSquares = 0.0;
+    for (int i = 0; i < grainLength; i += 4)
+    {
+        const double w = 0.5 - 0.5 * std::cos (kTwoPi * i / (grainLength - 1));
+        const double x = c.buffer[(size_t) ((voice->start + i) % capacity)];
+        grainSquares += w * w * x * x;
+        windowSquares += w * w;
+    }
+    const double grainRms = std::sqrt (grainSquares / windowSquares);
+    voice->gain = grainRms > 0.0 ? (float) std::clamp (targetRms / grainRms, 0.5, 2.0) : 1.0f;
     voice->age = 0;
+    voice->length = grainLength;
     voice->active = true;
 }
 
@@ -139,14 +184,20 @@ float FreezeEngine::renderGrains (Channel& c)
     {
         if (! g.active)
             continue;
-        sum += c.buffer[(size_t) ((g.start + g.age) % capacity)] * window[(size_t) g.age];
-        if (++g.age >= grainLength)
+        // Hann window from the table, linearly interpolated for any grain length
+        const float phase = (float) g.age * (float) kWindowTableSize / (float) (g.length - 1);
+        const auto idx = std::min ((int) phase, kWindowTableSize - 1);
+        const float w = window[(size_t) idx] + (window[(size_t) idx + 1] - window[(size_t) idx]) * (phase - (float) idx);
+        sum += c.buffer[(size_t) ((g.start + g.age) % capacity)] * w * g.gain;
+        if (++g.age >= g.length)
             g.active = false;
     }
-    return sum * kWetGain;
+    // Power-sum normalisation for uncorrelated Hann grains at the actual overlap
+    return sum * (float) (1.0 / std::sqrt (grainSeconds / spacingSeconds() * 0.375));
 }
 
-void FreezeEngine::process (float* const* channels, int numChannels, int numSamples, const float* freezeAmount)
+void FreezeEngine::process (float* const* channels, int numChannels, int numSamples, const float* freezeAmount,
+                            const float* fxAmount)
 {
     numChannels = std::min (numChannels, (int) channelState.size());
 
@@ -180,7 +231,13 @@ void FreezeEngine::process (float* const* channels, int numChannels, int numSamp
                     spawnGrain (c);
                     c.nextSpawn += nextSpawnInterval (c);
                 }
-                const float wet = renderGrains (c);
+                float wet = renderGrains (c);
+                if (fxAmount != nullptr)
+                {
+                    const float f = fxAmount[i];
+                    const float effect = fx.processSample (ch, wet);
+                    wet = (wet + f * effect) / std::sqrt (1.0f + f * f);
+                }
                 channels[ch][i] = channels[ch][i] * dryGain + wet * wetGain;
             }
         }
@@ -188,7 +245,11 @@ void FreezeEngine::process (float* const* channels, int numChannels, int numSamp
         ++sampleCounter;
     }
 
-    // While bypassed, capture keeps running but no grains play; the cloud restarts immediately when raised.
+    // While bypassed, capture keeps running but no grains or effects play; the cloud restarts
+    // immediately when raised.
+    if (bypass && ! bypassed)
+        fx.reset();
+    bypassed = bypass;
     if (bypass)
         for (int ch = 0; ch < numChannels; ++ch)
         {
