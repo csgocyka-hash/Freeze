@@ -7,7 +7,7 @@ namespace gf
 class Random
 {
 public:
-    explicit Random (uint64_t s = 1) { seed (s); }
+    Random (uint64_t s = 1) { seed (s); }
 
     void seed (uint64_t s)
     {
