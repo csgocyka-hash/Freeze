@@ -12,6 +12,7 @@ public:
     void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour&, bool, bool) override {}
 
     juce::Colour accent { 0xff4f9dff }, accentLight { 0xffa8e0ff }, accentDeep { 0xff2a55e6 };
+    int variant = 0; // design variation being compared (0..2)
 };
 
 // Wide panel: wordmark and preset selector on top, the big Amount knob in the middle over an ice splash
@@ -23,6 +24,7 @@ public:
     ~FreezeEditor() override;
 
     void paint (juce::Graphics&) override;
+    void setDesignVariant (int variant);
     void resized() override;
 
 private:
@@ -47,6 +49,7 @@ private:
     void stepPreset (int delta);
     void applyPresetColours();
     void drawSplash (juce::Graphics&, juce::Point<float> centre, float amount) const;
+    juce::Path splashShape (juce::Point<float> centre, float radius, float rough, int seedOffset, float wobbleScale) const;
     void drawSnowflake (juce::Graphics&, juce::Point<float> centre, float radius, float amount) const;
 
     FreezeProcessor& freezeProcessor;
@@ -57,6 +60,8 @@ private:
     std::vector<Shard> shards;
     std::vector<float> edgeNoise; // -1..1 per edge point of the splash
     int shownPreset = -1;
+    int designVariant = 0;
+    juce::Image noise;
     juce::Colour accent, accentLight, accentDeep;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FreezeEditor)
