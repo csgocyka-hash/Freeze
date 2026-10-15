@@ -32,6 +32,13 @@ void FreezeEngine::prepare (double newSampleRate, int /*maxBlockSize*/, int numC
         c.energy.assign ((size_t) bufferSegments, 0.0f);
         c.floor.prepare (sampleRate);
     }
+    for (size_t ch = 0; ch < channelState.size(); ++ch)
+    {
+        // Mutually prime delays at 48 kHz (5.4, 7.9, 12.8, 19.1 ms), a little longer on each further channel
+        constexpr int delays[kDiffuserStages] = { 257, 379, 613, 919 };
+        for (int k = 0; k < kDiffuserStages; ++k)
+            channelState[ch].diffuser[k].assign ((size_t) std::max<long> (1, std::lround ((delays[k] + 17 * (int) ch) * sampleRate / 48000.0)), 0.0f);
+    }
     setGrainSeconds (grainSeconds); // the floor's interval
     reset();
 }
@@ -64,6 +71,12 @@ void FreezeEngine::reset()
         c.grainPower = 0.0f;
         c.nextSpawn = 0;
         c.reverseAccumulator = 0.5f;
+        c.diffuseAccumulator = 0.5f;
+        for (int k = 0; k < kDiffuserStages; ++k)
+        {
+            std::fill (c.diffuser[k].begin(), c.diffuser[k].end(), 0.0f);
+            c.diffuserPos[k] = 0;
+        }
     }
 }
 
@@ -114,6 +127,26 @@ double FreezeEngine::readDistance (const Channel& c, int64_t readIndex, bool rev
             nearest = std::min (nearest, std::abs ((double) readIndex - ((double) g.start + position)));
         }
     return nearest;
+}
+
+void FreezeEngine::setMaxDiffusion (float amount)
+{
+    maxDiffusion = std::clamp (amount, 0.0f, 1.0f);
+}
+
+float FreezeEngine::diffuse (Channel& c, float x)
+{
+    for (int k = 0; k < kDiffuserStages; ++k)
+    {
+        auto& line = c.diffuser[k];
+        auto& pos = c.diffuserPos[k];
+        const float delayed = line[pos];
+        const float v = x + kDiffuserGain * delayed;
+        line[pos] = v;
+        pos = pos + 1 == line.size() ? 0 : pos + 1;
+        x = delayed - kDiffuserGain * v;
+    }
+    return x;
 }
 
 void FreezeEngine::setHold (bool shouldHold)
@@ -440,14 +473,22 @@ void FreezeEngine::spawnGrain (Channel& c, float amount)
     voice->flatMix = smoothness;
     voice->rate = rate;
     voice->active = true;
+
+    // Diffused grains (part of smooth mode): none below kDiffusionStart Amount, all at full Amount, spread
+    // evenly in between
+    const float diffusion = maxDiffusion * maxSmoothness * std::clamp ((amount - kDiffusionStart) / (1.0f - kDiffusionStart), 0.0f, 1.0f);
+    c.diffuseAccumulator += diffusion;
+    voice->diffuse = c.diffuseAccumulator >= 1.0f;
+    if (voice->diffuse)
+        c.diffuseAccumulator -= 1.0f;
     ++grainsSpawned;
     grainsReversed += reverse ? 1 : 0;
 }
 
-float FreezeEngine::renderGrains (Channel& c)
+float FreezeEngine::renderGrains (Channel& c, float& diffused)
 {
     const auto capacity = (int64_t) c.buffer.size();
-    float sum = 0.0f;
+    float sum = 0.0f, toDiffuse = 0.0f;
     for (auto& g : c.grains)
     {
         if (! g.active)
@@ -477,12 +518,14 @@ float FreezeEngine::renderGrains (Channel& c)
             const float c3 = 0.5f * (x2 - xm1) + 1.5f * (x0 - x1);
             x = ((c3 * frac + c2) * frac + c1) * frac + x0;
         }
-        sum += x * w * g.gain;
+        (g.diffuse ? toDiffuse : sum) += x * w * g.gain;
         if (++g.age >= g.length)
             g.active = false;
     }
     // Power-sum normalisation for uncorrelated Hann grains at the actual overlap
-    return sum * (float) (1.0 / std::sqrt (currentGrainSeconds() / spacingSeconds() * 0.375));
+    const auto normalise = (float) (1.0 / std::sqrt (currentGrainSeconds() / spacingSeconds() * 0.375));
+    diffused = toDiffuse * normalise;
+    return sum * normalise;
 }
 
 void FreezeEngine::process (float* const* channels, int numChannels, int numSamples, const float* freezeAmount,
@@ -524,7 +567,9 @@ void FreezeEngine::process (float* const* channels, int numChannels, int numSamp
                     spawnGrain (c, freezeAmount[i]);
                     c.nextSpawn += nextSpawnInterval (c);
                 }
-                float wet = renderGrains (c);
+                float toDiffuse = 0.0f;
+                float wet = renderGrains (c, toDiffuse);
+                wet += diffuse (c, toDiffuse); // (exactly 0 while no grain was ever diffused)
                 c.grainPower += grainPowerCoeff * (wet * wet - c.grainPower);
                 if (smoothness > 0.0f && floorLevel > 0.0f)
                 {
@@ -567,6 +612,8 @@ void FreezeEngine::process (float* const* channels, int numChannels, int numSamp
                 g.active = false;
             c.nextSpawn = sampleCounter;
             c.grainPower = 0.0f;
+            for (auto& line : c.diffuser)
+                std::fill (line.begin(), line.end(), 0.0f);
         }
 }
 } // namespace gf

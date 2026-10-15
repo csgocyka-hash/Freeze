@@ -31,6 +31,13 @@ constexpr double kAttackFadeSeconds = 0.020;
 // within ~50 ms of each other comb-filter, which sounds phasey), trying up to kSpacingTries positions.
 constexpr double kMinReadSpacingSeconds = 0.040;
 constexpr int kSpacingTries = 16;
+// From kDiffusionStart Amount on, a growing share of new grains (all at full Amount) plays through a
+// diffuser: four Schroeder all-passes (gain kDiffuserGain, mutually prime delays of about 5-19 ms) that
+// smear what is left of grain edges and de-click dips. Whole grains are routed, so the cloud is never mixed
+// with its own all-passed copy (which would comb-filter while the diffuser fades in).
+constexpr float kDiffusionStart = 0.7f;
+constexpr float kDiffuserGain = 0.6f;
+constexpr int kDiffuserStages = 4;
 
 class FreezeEngine
 {
@@ -67,6 +74,9 @@ public:
     // playing grain of the same direction reads (diagnostic: such pairs comb-filter).
     double closeReadShare() const;
 
+    // Share of grains sent through the diffuser at full Amount (0..1, default 1; from 70 % Amount up).
+    void setMaxDiffusion (float amount);
+
     // Detune (0..1): each new grain is pitched randomly up or down by up to 50 cents x detune.
     void setDetune (float amount);
 
@@ -90,6 +100,7 @@ private:
         bool reverse = false;
         float flatMix = 0.0f; // how much the grain reads from the flattened copy
         double rate = 1.0;    // playback speed (detune); 1 = original pitch
+        bool diffuse = false; // plays through the diffuser
         bool active = false;
     };
 
@@ -111,12 +122,16 @@ private:
         Grain grains[kMaxGrains];
         Random random;
         float reverseAccumulator = 0.0f; // spreads reversed grains evenly between forward ones
+        float diffuseAccumulator = 0.0f; // spreads diffused grains the same way
+        std::vector<float> diffuser[kDiffuserStages]; // all-pass delay lines
+        size_t diffuserPos[kDiffuserStages] {};
         int64_t nextSpawn = 0;
     };
 
     void commitSegment (Channel& c, int64_t segmentTime);
     void spawnGrain (Channel& c, float amount);
-    float renderGrains (Channel& c);
+    float renderGrains (Channel& c, float& diffused);
+    float diffuse (Channel& c, float x);
     static float sourceAt (const Channel& c, int64_t index, float flatMix);
     int nextSpawnInterval (Channel& c);
     double spacingSeconds() const;
@@ -132,6 +147,7 @@ private:
     bool hold = false;
     float maxReverseShare = 0.5f;
     float maxSmoothness = 1.0f;
+    float maxDiffusion = 1.0f;
     float smoothness = 0.0f; // current, from Amount
     float floorLevel = 0.25f;
     float detune = 0.0f;
