@@ -23,6 +23,13 @@ public:
     ~FreezeEditor() override;
 
     void paint (juce::Graphics&) override;
+
+    // Typefaces for the wordmark (light), preset name (medium) and labels (semibold); empty = system font
+    struct FontSet
+    {
+        juce::Typeface::Ptr light, medium, semibold;
+    };
+    static FontSet& fonts();
     void resized() override;
 
 private:

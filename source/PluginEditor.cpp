@@ -3,9 +3,15 @@
 
 namespace
 {
-// Modern geometric sans: Avenir Next on macOS, Segoe UI on Windows
+// Modern geometric sans: Avenir Next on macOS, Segoe UI on Windows, unless typefaces were supplied
 juce::FontOptions uiFont (float height, const juce::String& style)
 {
+    const auto& set = FreezeEditor::fonts();
+    if (set.light != nullptr)
+    {
+        auto& face = style == "Ultra Light" ? set.light : (style == "Medium" ? set.medium : set.semibold);
+        return juce::FontOptions (face).withHeight (height);
+    }
    #if JUCE_MAC
     return juce::FontOptions ("Avenir Next", style, height);
    #else
@@ -159,14 +165,6 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
     g.setColour (juce::Colour (0x38000000));
     g.drawEllipse (face, 0.6f);
 
-    // Centre cap: tiny polished dimple
-    {
-        const auto dimple = juce::Rectangle<float> (knobRadius * 0.16f, knobRadius * 0.16f).withCentre (c);
-        g.setGradientFill (juce::ColourGradient (juce::Colour (0xffc9ccd1), dimple.getX(), dimple.getY(),
-                                                 juce::Colours::white, dimple.getRight(), dimple.getBottom(), false));
-        g.fillEllipse (dimple);
-    }
-
     // Super-thin black pointer line, set into the face (light lower edge)
     juce::Path pointer;
     pointer.startNewSubPath (c.getPointOnCircumference (knobRadius * 0.16f, angle));
@@ -275,6 +273,12 @@ void FreezeEditor::updateLabel (Knob& knob)
     const bool showValue = knob.slider.isMouseButtonDown();
     knob.label.setText (showValue ? freezeProcessor.apvts.getParameter (knob.paramId)->getCurrentValueAsText() : knob.name,
                         juce::dontSendNotification);
+}
+
+FreezeEditor::FontSet& FreezeEditor::fonts()
+{
+    static FontSet set;
+    return set;
 }
 
 void FreezeEditor::stepPreset (int delta)
