@@ -598,11 +598,17 @@ void FreezeEditor::paint (juce::Graphics& g)
 
     // Letter-spaced wordmark
     juce::GlyphArrangement word;
-    word.addLineOfText (uiFont (19.0f, "Ultra Light"), "FREEZE", 18.0f, 27.0f);
+    word.addLineOfText (uiFont (19.0f, "Ultra Light"), "FREEZE", 18.0f, 24.0f);
     for (int i = 0; i < word.getNumGlyphs(); ++i)
         word.moveRangeOfGlyphs (i, 1, 5.0f * (float) i, 0.0f);
     g.setColour (ink);
     word.draw (g);
+
+    // Maker line, very small under the wordmark
+    juce::GlyphArrangement maker;
+    maker.addLineOfText (uiFont (7.5f, "Medium").withKerningFactor (0.2f), "by fouren", 19.0f, 35.0f);
+    g.setColour (inkSoft);
+    maker.draw (g);
 
 
     g.drawImage (noise, bounds);
