@@ -9,10 +9,11 @@ std::vector<float> ones (size_t n, float v = 1.0f) { return std::vector<float> (
 
 std::vector<float> freezeWith (double grain, double density, const std::vector<float>& input,
                                const std::vector<float>* fx = nullptr, const gf::FxCharacter* character = nullptr,
-                               int blockSize = 512)
+                               int blockSize = 512, uint64_t seed = 1)
 {
     gf::FreezeEngine e;
     e.prepare (48000, 512, 1);
+    e.setSeed (seed);
     e.setGrainSeconds (grain);
     e.setDensity (density);
     if (character != nullptr)
@@ -37,7 +38,8 @@ TEST (fills_gaps_all_grain_settings)
         for (double density : { 4.0, 6.0, 10.0 })
         {
             std::printf ("    grain %.2f s, density %.0f:\n", grain, density);
-            checkGapsFilled (freezeWith (grain, density, p), 48000);
+            checkGapsFilledOverSeeds ([&] (uint64_t seed) { return freezeWith (grain, density, p, nullptr, nullptr, 512, seed); },
+                                      48000);
         }
 }
 

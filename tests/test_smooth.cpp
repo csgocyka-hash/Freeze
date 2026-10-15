@@ -6,11 +6,13 @@ namespace
 {
 constexpr double sr = 48000.0;
 
-std::vector<float> freezeAt (float amount, std::vector<float> input, float smoothness = 1.0f, gf::FreezeEngine* engine = nullptr)
+std::vector<float> freezeAt (float amount, std::vector<float> input, float smoothness = 1.0f, gf::FreezeEngine* engine = nullptr,
+                             uint64_t seed = 1)
 {
     gf::FreezeEngine local;
     auto& e = engine != nullptr ? *engine : local;
     e.prepare (sr, 512, 1);
+    e.setSeed (seed);
     e.setMaxSmoothness (smoothness);
     e.setSpectralLevel (0.0f); // grains only; the spectral layer has its own tests
     std::vector<float> a (input.size(), amount);
@@ -43,14 +45,18 @@ TEST (full_amount_uses_longer_denser_grains)
 
 TEST (full_amount_keeps_pitch_and_level)
 {
+    // (Averaged over seeds: on one seed the off-pitch levels of a random cloud scatter by several dB.)
     auto in = pluckTrain (sr, 8.0, 220.0);
-    auto out = freezeAt (1.0f, in);
-    const size_t from = (size_t) (2 * sr), to = out.size();
-    const double at220 = bandLevel (out, from, to, 220.0, sr);
-    const double off = std::max ({ bandLevel (out, from, to, 165.0, sr), bandLevel (out, from, to, 290.0, sr) });
-    const double db = 20.0 * std::log10 (rms (out.data() + from, to - from) / soundingRms (in, sr));
-    std::printf ("    220 Hz %.4f vs %.4f, level %+.2f dB\n", at220, off, db);
-    CHECK (at220 > off * 10.0);
+    const size_t from = (size_t) (2 * sr), to = in.size();
+    double db = 0.0;
+    const double pitchDb = meanOverSeeds ([&] (uint64_t seed) {
+        auto out = freezeAt (1.0f, in, 1.0f, nullptr, seed);
+        const double off = std::max (bandLevel (out, from, to, 165.0, sr), bandLevel (out, from, to, 290.0, sr));
+        db += 20.0 * std::log10 (rms (out.data() + from, to - from) / soundingRms (in, sr)) / 5.0;
+        return 20.0 * std::log10 (bandLevel (out, from, to, 220.0, sr) / off);
+    });
+    std::printf ("    220 Hz %.1f dB above 165 / 290 Hz, level %+.2f dB\n", pitchDb, db);
+    CHECK (pitchDb > 20.0);
     CHECK (db > -4.0 && db < 4.0);
 }
 

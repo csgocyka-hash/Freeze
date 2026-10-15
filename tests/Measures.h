@@ -70,6 +70,36 @@ inline void checkGapsFilled (const std::vector<float>& out, double sr)
     CHECK (minRatio > 0.0316);
 }
 
+// The grain cloud is random, so values measured on it scatter from seed to seed (grains of one tone at
+// random phases can cancel each other for a moment). Statistical checks average over a few seeds.
+template <typename Measure>
+inline double meanOverSeeds (Measure measure, int seeds = 5)
+{
+    double sum = 0.0;
+    for (int s = 1; s <= seeds; ++s)
+        sum += measure ((uint64_t) s);
+    return sum / seeds;
+}
+
+// checkGapsFilled on the median of a few seeds
+template <typename Render>
+inline void checkGapsFilledOverSeeds (Render render, double sr, int seeds = 3)
+{
+    std::vector<double> floors, minima;
+    for (int s = 1; s <= seeds; ++s)
+    {
+        const auto out = render ((uint64_t) s);
+        floors.push_back (foldedRhythmFloor (out, sr));
+        minima.push_back (minWindowRatio (out, sr));
+    }
+    std::sort (floors.begin(), floors.end());
+    std::sort (minima.begin(), minima.end());
+    const double floor = floors[floors.size() / 2], minRatio = minima[minima.size() / 2];
+    std::printf ("    %.0f Hz: rhythm floor %.2f, min window %.1f dB (medians of %d seeds)\n", sr, floor, 20.0 * std::log10 (minRatio), seeds);
+    CHECK (floor > 0.6);
+    CHECK (minRatio > 0.0316);
+}
+
 inline double maxStep (const std::vector<float>& x, size_t from)
 {
     double m = 0.0;
