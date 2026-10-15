@@ -37,7 +37,13 @@ juce::FontOptions uiFont (float height, const juce::String& style)
 {
     const auto& set = FreezeEditor::fonts();
     auto& face = style == "Ultra Light" ? set.light : (style == "Medium" ? set.medium : set.semibold);
-    return juce::FontOptions (face).withHeight (height);
+    auto options = juce::FontOptions (face).withHeight (height);
+    return set.capitals && style != "Ultra Light" ? options.withKerningFactor (0.18f) : options;
+}
+
+juce::String labelText (const juce::String& text)
+{
+    return FreezeEditor::fonts().capitals ? text.toUpperCase() : text;
 }
 
 const juce::Colour panelTop (0xfff4f5f7), panelBottom (0xffe2e5ea), ink (0xff3b4250), inkSoft (0xff8a92a0);
@@ -230,7 +236,7 @@ FreezeEditor::FreezeEditor (FreezeProcessor& p)
     next.onClick = [this] { stepPreset (1); };
 
     presetName.setJustificationType (juce::Justification::centred);
-    presetName.setFont (uiFont (16.0f, "Medium"));
+    presetName.setFont (uiFont (fonts().capitals ? 14.0f : 16.0f, "Medium"));
     presetName.setInterceptsMouseClicks (false, false);
     addAndMakeVisible (presetName);
 
@@ -295,7 +301,7 @@ void FreezeEditor::setupKnob (Knob& knob, const juce::String& name, const juce::
     addAndMakeVisible (knob.slider);
 
     knob.label.setJustificationType (juce::Justification::centred);
-    knob.label.setFont (uiFont (12.5f, "Demi Bold").withKerningFactor (0.08f));
+    knob.label.setFont (fonts().capitals ? uiFont (11.0f, "Demi Bold") : uiFont (12.5f, "Demi Bold").withKerningFactor (0.08f));
     knob.label.setInterceptsMouseClicks (false, false);
     addAndMakeVisible (knob.label);
     updateLabel (knob);
@@ -305,7 +311,7 @@ void FreezeEditor::updateLabel (Knob& knob)
 {
     // Shows the knob's name, or its value while it is being dragged.
     const bool showValue = knob.slider.isMouseButtonDown();
-    knob.label.setText (showValue ? freezeProcessor.apvts.getParameter (knob.paramId)->getCurrentValueAsText() : knob.name,
+    knob.label.setText (showValue ? freezeProcessor.apvts.getParameter (knob.paramId)->getCurrentValueAsText() : labelText (knob.name),
                         juce::dontSendNotification);
 }
 
@@ -343,7 +349,7 @@ void FreezeEditor::applyPresetColours()
     lookAndFeel.accentLight = accentLight;
     lookAndFeel.accentDeep = accentDeep;
 
-    presetName.setText (preset.name, juce::dontSendNotification);
+    presetName.setText (labelText (preset.name), juce::dontSendNotification);
     presetName.setColour (juce::Label::textColourId, ink);
     for (auto* knob : { &grain, &fx })
         knob->label.setColour (juce::Label::textColourId, accentDeep);

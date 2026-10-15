@@ -1,5 +1,5 @@
 // Renders the plugin window to a PNG, no DAW or audio device needed.
-//   snapshot out.png [amount 0..1] [preset 0..4] [light.ttf medium.ttf semibold.ttf]
+//   snapshot out.png [amount 0..1] [preset 0..4] [light.ttf medium.ttf semibold.ttf [caps]]
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
 #include <juce_audio_utils/juce_audio_utils.h>
@@ -21,7 +21,7 @@ int main (int argc, char** argv)
             juce::File::getCurrentWorkingDirectory().getChildFile (path).loadFileAsData (data);
             return juce::Typeface::createSystemTypefaceFor (data.getData(), data.getSize());
         };
-        FreezeEditor::fonts() = { load (argv[4]), load (argv[5]), load (argv[6]) };
+        FreezeEditor::fonts() = { load (argv[4]), load (argv[5]), load (argv[6]), argc > 7 && juce::String (argv[7]) == "caps" };
     }
     FreezeProcessor processor;
     if (argc > 3)

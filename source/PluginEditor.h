@@ -29,6 +29,7 @@ public:
     struct FontSet
     {
         juce::Typeface::Ptr light, medium, semibold;
+        bool capitals = false; // preset name and labels in spaced capitals
     };
     static FontSet& fonts();
     void resized() override;
