@@ -71,11 +71,15 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
     const float tickLength = juce::jmax (2.5f, size * 0.05f);
     const float knobRadius = tickOuter - tickLength - juce::jmax (2.0f, size * (flat ? 0.02f : 0.035f));
 
-    // Measuring ring: a tapered sweep, rounded and wide at 0 %, pointed at 100 %. Dim in full, solid up to the value.
+    // Measuring ring (big knob only): a tapered sweep, rounded and wide at 0 %, pointed at 100 %. Dim in full,
+    // solid up to the value. The small knobs show their value by the pointer alone.
     const float ringStartWidth = juce::jmax (2.5f, size * 0.032f);
-    g.setColour (juce::Colours::white.withAlpha (0.3f));
-    g.fillPath (taperedArc (c, ringRadius, startAngle, endAngle, ringStartWidth, 1.0f));
-    if (sliderPos > 0.0f)
+    if (flat)
+    {
+        g.setColour (juce::Colours::white.withAlpha (0.3f));
+        g.fillPath (taperedArc (c, ringRadius, startAngle, endAngle, ringStartWidth, 1.0f));
+    }
+    if (flat && sliderPos > 0.0f)
     {
         g.setColour (juce::Colours::white);
         g.fillPath (taperedArc (c, ringRadius, startAngle, endAngle, ringStartWidth, sliderPos));
