@@ -51,7 +51,7 @@ void FreezeEngine::reset()
         std::fill (c.flat.begin(), c.flat.end(), 0.0f);
         c.levelReference = 0.0f;
         c.flatEnvelope = 0.0f;
-        c.fadeInRemaining = 0;
+        c.sinceDip = 1 << 30;
         c.pendingDip = -1;
         std::fill (c.energy.begin(), c.energy.end(), 0.0f);
         c.committedSegments = 0;
@@ -203,20 +203,22 @@ void FreezeEngine::flattenSegment (Channel& c, int64_t segment)
     // Flattening divides the audio by its peak envelope, which removes each note's attack and decay and
     // leaves its tone at a steady level. The envelope looks 1 ms ahead and attacks instantly, so it is
     // already up when a note starts (no overshoot). Where the recording jumps (a note start, or a join
-    // where silence was dropped) the copy dips briefly to zero and fades back in, so grains never click.
+    // where silence was dropped) the copy fades out over 4 ms, so grains never click, and then leaves out the
+    // note's attack: silent for kAttackSkipSeconds, fading back in over kAttackFadeSeconds.
     const auto capacity = c.buffer.size();
     const auto base = (size_t) (segment % bufferSegments) * (size_t) segmentLength;
     auto sampleAt = [&] (int i) { return c.buffer[(base + (size_t) i) % capacity]; }; // i may run into the next segment
     const int lookAhead = std::max (1, (int) std::lround (0.001 * sampleRate));
-    const int fadeOut = std::max (1, (int) std::lround (0.002 * sampleRate));
-    const int fadeIn = std::max (1, (int) std::lround (0.004 * sampleRate));
+    const int fadeOut = std::max (1, (int) std::lround (0.004 * sampleRate));
+    const int skip = (int) std::lround (kAttackSkipSeconds * sampleRate);
+    const int fadeIn = std::max (1, (int) std::lround (kAttackFadeSeconds * sampleRate));
     const float release = (float) std::exp (-1.0 / (0.040 * sampleRate));
 
     int dips[8];
     int numDips = 0;
     const auto timeOf = [&] (int64_t s) { return c.segmentTime[(size_t) (s % bufferSegments)]; };
-    if (segment > 0 && timeOf (segment) != timeOf (segment - 1) + 1)
-        dips[numDips++] = 0; // silence was dropped before this segment: the recording jumps here
+    if (segment == 0 || timeOf (segment) != timeOf (segment - 1) + 1)
+        dips[numDips++] = 0; // the recording starts, or silence was dropped before this segment: it jumps here
     if (c.pendingDip >= 0 && numDips < 8)
         dips[numDips++] = c.pendingDip;
     c.pendingDip = -1;
@@ -253,36 +255,30 @@ void FreezeEngine::flattenSegment (Channel& c, int64_t segment)
         c.flat[base + (size_t) i] = sampleAt (i) * gain;
     }
 
-    // Fade-in carried over from a dip near the end of the previous segment
-    for (int i = 0; i < c.fadeInRemaining && i < segmentLength; ++i)
-    {
-        const int k = fadeIn - c.fadeInRemaining + i;
-        c.flat[base + (size_t) i] *= 0.5f - 0.5f * std::cos (kPi * (float) k / (float) fadeIn);
-    }
-    c.fadeInRemaining = std::max (0, c.fadeInRemaining - segmentLength);
-
-    // Dips: fade out just before the jump (reaching back into the previous segment if needed), fade in after
+    // Dips: fade out just before the jump (reaching back into the previous segment if needed)...
     const bool previousIsContiguous = segment > 0;
     for (int d = 0; d < numDips; ++d)
-    {
-        const int at = dips[d];
         for (int k = 1; k <= fadeOut; ++k)
         {
-            const int i = at - k;
+            const int i = dips[d] - k;
             if (i < 0 && ! previousIsContiguous)
                 break;
             const auto index = (base + capacity + (size_t) (std::ptrdiff_t) i) % capacity;
             c.flat[index] *= 0.5f - 0.5f * std::cos (kPi * (float) k / (float) fadeOut);
         }
-        for (int k = 0; k < fadeIn; ++k)
+
+    // ...then the attack gap and fade-in, which may run on into the next segments. Each dip restarts it, so
+    // overlapping dips never multiply into a step.
+    std::sort (dips, dips + numDips);
+    for (int i = 0, d = 0; i < segmentLength; ++i)
+    {
+        for (; d < numDips && dips[d] == i; ++d)
+            c.sinceDip = 0;
+        if (c.sinceDip < skip + fadeIn)
         {
-            const int i = at + k;
-            if (i >= segmentLength)
-            {
-                c.fadeInRemaining = std::max (c.fadeInRemaining, fadeIn - k);
-                break;
-            }
-            c.flat[base + (size_t) i] *= 0.5f - 0.5f * std::cos (kPi * (float) k / (float) fadeIn);
+            const int k = c.sinceDip - skip;
+            c.flat[base + (size_t) i] *= k < 0 ? 0.0f : 0.5f - 0.5f * std::cos (kPi * (float) k / (float) fadeIn);
+            ++c.sinceDip;
         }
     }
 }
@@ -421,7 +417,8 @@ void FreezeEngine::spawnGrain (Channel& c, float amount)
         rate = std::pow (2.0, (2.0 * c.random.uniform() - 1.0) * 50.0 * detune / 1200.0);
 
     // Level-match the grain: its windowed RMS is brought towards the recent input level (within +-6 dB),
-    // so short grains on loud attacks are not louder than long grains over whole notes.
+    // so short grains on loud attacks are not louder than long grains over whole notes. Smooth grains may be
+    // raised by up to +12 dB: their copy leaves out the attacks, which carry much of a short pluck's level.
     const auto capacity = (int64_t) c.buffer.size();
     double grainSquares = 0.0, windowSquares = 0.0;
     for (int i = 0; i < grainLength; i += 4)
@@ -433,7 +430,8 @@ void FreezeEngine::spawnGrain (Channel& c, float amount)
         windowSquares += w * w;
     }
     const double grainRms = std::sqrt (grainSquares / windowSquares);
-    voice->gain = grainRms > 0.0 ? (float) std::clamp (targetRms / grainRms, 0.5, 2.0) : 1.0f;
+    const double maxGain = 2.0 + 2.0 * smoothness;
+    voice->gain = grainRms > 0.0 ? (float) std::clamp (targetRms / grainRms, 0.5, maxGain) : 1.0f;
     const int64_t firstRead = reverse ? voice->start + grainLength - 1 : voice->start;
     grainsClose += readDistance (c, firstRead, reverse, voice) < kMinReadSpacingSeconds * sampleRate ? 1 : 0;
     voice->age = 0;

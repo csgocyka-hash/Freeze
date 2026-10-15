@@ -23,6 +23,10 @@ constexpr int kMaxGrains = 64;
 constexpr int kWindowTableSize = 4096;
 constexpr double kSelectSeconds = 1.5;
 constexpr float kSelectThreshold = 0.25f;
+// Smooth mode freezes the notes' bodies, not their attacks: after each note start the flattened copy stays
+// silent for kAttackSkipSeconds and fades back in over kAttackFadeSeconds.
+constexpr double kAttackSkipSeconds = 0.010;
+constexpr double kAttackFadeSeconds = 0.020;
 // Smooth mode keeps the read positions of grains playing at the same time this far apart (two grains reading
 // within ~50 ms of each other comb-filter, which sounds phasey), trying up to kSpacingTries positions.
 constexpr double kMinReadSpacingSeconds = 0.040;
@@ -97,7 +101,7 @@ private:
         float levelReference = 0.0f;  // slow average of the sounding level, what `flat` is scaled to
         std::vector<int64_t> segmentTime; // when each buffer segment was recorded (in segments), to find joins
         float flatEnvelope = 0.0f;    // peak envelope used for flattening (instant attack, 40 ms release)
-        int fadeInRemaining = 0;      // de-click fade-in carried over into the next segment
+        int sinceDip = 1 << 30;       // samples since the last note start or join (attack gap and fade-in)
         int pendingDip = -1;          // a note start found just past the end of the last flattened segment
         SpectralFloor floor;
         bool floorStale = true;  // the floor was silent (smooth mode off) and starts afresh when it returns
