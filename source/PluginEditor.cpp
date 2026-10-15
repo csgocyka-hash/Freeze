@@ -4,6 +4,34 @@
 
 namespace
 {
+// Tapered arc: rounded and widest at the start angle, narrowing to a point at the end of the full sweep.
+// 'until' (0..1) cuts the shape off part-way, so the travelled part follows the same taper.
+juce::Path taperedArc (juce::Point<float> c, float radius, float startAngle, float endAngle, float startWidth, float until)
+{
+    juce::Path p;
+    constexpr int steps = 96;
+    const int last = juce::jmax (1, (int) std::ceil (steps * until));
+    auto widthAt = [&] (float t) { return startWidth * (1.0f - t); };
+    auto angleAt = [&] (float t) { return startAngle + (endAngle - startAngle) * t; };
+
+    for (int i = 0; i <= last; ++i) // outer edge, start to end
+    {
+        const float t = juce::jmin (until, (float) i / steps);
+        const auto pt = c.getPointOnCircumference (radius + widthAt (t) * 0.5f, angleAt (t));
+        i == 0 ? p.startNewSubPath (pt) : p.lineTo (pt);
+    }
+    for (int i = last; i >= 0; --i) // inner edge, back to the start
+    {
+        const float t = juce::jmin (until, (float) i / steps);
+        p.lineTo (c.getPointOnCircumference (radius - widthAt (t) * 0.5f, angleAt (t)));
+    }
+    p.closeSubPath();
+    // Rounded start cap
+    const auto start = c.getPointOnCircumference (radius, startAngle);
+    p.addEllipse (juce::Rectangle<float> (startWidth, startWidth).withCentre (start));
+    return p;
+}
+
 // Montserrat: ExtraLight for the wordmark, Medium for the preset name, SemiBold for labels
 juce::FontOptions uiFont (float height, const juce::String& style)
 {
@@ -20,8 +48,10 @@ constexpr float kSplashRadius = 108.0f;
 } // namespace
 
 void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
-                                          float startAngle, float endAngle, juce::Slider&)
+                                          float startAngle, float endAngle, juce::Slider& slider)
 {
+    const bool flat = slider.getProperties().getWithDefault ("flat", false); // the big knob is drawn flat
+
     // Square knob area at the top of the component; the space below holds the shadow
     const auto bounds = juce::Rectangle<int> (x, y, width, height).toFloat();
     const float size = juce::jmin (bounds.getWidth(), bounds.getHeight());
@@ -33,19 +63,16 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
     const float ringRadius = size * 0.5f - triangleSize - 1.5f;
     const float tickOuter = ringRadius - juce::jmax (2.0f, size * 0.035f);
     const float tickLength = juce::jmax (2.5f, size * 0.05f);
-    const float knobRadius = tickOuter - tickLength - juce::jmax (2.0f, size * 0.035f);
+    const float knobRadius = tickOuter - tickLength - juce::jmax (2.0f, size * (flat ? 0.02f : 0.035f));
 
-    // Measuring ring: dim full ring, solid white up to the value, triangle marker at the value
-    const float ringWidth = juce::jmax (1.2f, size * 0.012f);
-    juce::Path ring, travelled;
-    ring.addCentredArc (c.x, c.y, ringRadius, ringRadius, 0.0f, startAngle, endAngle, true);
-    g.setColour (juce::Colours::white.withAlpha (0.4f));
-    g.strokePath (ring, juce::PathStrokeType (ringWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    // Measuring ring: a tapered sweep, rounded and wide at 0 %, pointed at 100 %. Dim in full, solid up to the value.
+    const float ringStartWidth = juce::jmax (2.5f, size * 0.032f);
+    g.setColour (juce::Colours::white.withAlpha (0.3f));
+    g.fillPath (taperedArc (c, ringRadius, startAngle, endAngle, ringStartWidth, 1.0f));
     if (sliderPos > 0.0f)
     {
-        travelled.addCentredArc (c.x, c.y, ringRadius, ringRadius, 0.0f, startAngle, angle, true);
         g.setColour (juce::Colours::white);
-        g.strokePath (travelled, juce::PathStrokeType (ringWidth * 2.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.fillPath (taperedArc (c, ringRadius, startAngle, endAngle, ringStartWidth, sliderPos));
     }
     {
         juce::Path tri;
@@ -74,21 +101,30 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
     }
 
     // ---- Knob ----
-    const float wall = juce::jmax (1.5f, knobRadius * 0.09f); // visible side wall below the face
+    const float wall = flat ? 0.0f : juce::jmax (1.5f, knobRadius * 0.09f); // visible side wall below the face
     const auto face = juce::Rectangle<float> (knobRadius * 2.0f, knobRadius * 2.0f).withCentre (c);
     const auto base = face.translated (0.0f, wall);
     juce::Path body;
     body.addEllipse (base);
 
-    // Shadows: wide soft ambient shadow, a mid shadow and a tight contact shadow (ambient occlusion)
-    juce::DropShadow (juce::Colour (0x40101828), (int) (knobRadius * 0.9f), { (int) (knobRadius * 0.12f), (int) (knobRadius * 0.38f) })
-        .drawForPath (g, body);
-    juce::DropShadow (juce::Colour (0x50101828), (int) (knobRadius * 0.35f), { (int) (knobRadius * 0.05f), (int) (knobRadius * 0.14f) })
-        .drawForPath (g, body);
-    juce::DropShadow (juce::Colour (0x80101828), (int) juce::jmax (2.0f, knobRadius * 0.06f), { 0, (int) juce::jmax (1.0f, knobRadius * 0.03f) })
-        .drawForPath (g, body);
+    if (flat)
+    {
+        // Flat knob: just a soft, low shadow
+        juce::DropShadow (juce::Colour (0x30101828), (int) (knobRadius * 0.3f), { 0, (int) (knobRadius * 0.06f) }).drawForPath (g, body);
+    }
+    else
+    {
+        // Shadows: wide soft ambient shadow, a mid shadow and a tight contact shadow (ambient occlusion)
+        juce::DropShadow (juce::Colour (0x40101828), (int) (knobRadius * 0.9f), { (int) (knobRadius * 0.12f), (int) (knobRadius * 0.38f) })
+            .drawForPath (g, body);
+        juce::DropShadow (juce::Colour (0x50101828), (int) (knobRadius * 0.35f), { (int) (knobRadius * 0.05f), (int) (knobRadius * 0.14f) })
+            .drawForPath (g, body);
+        juce::DropShadow (juce::Colour (0x80101828), (int) juce::jmax (2.0f, knobRadius * 0.06f), { 0, (int) juce::jmax (1.0f, knobRadius * 0.03f) })
+            .drawForPath (g, body);
+    }
 
     // Side wall: satin band with fine vertical grip lines, lit from the left
+    if (! flat)
     {
         juce::Path side;
         side.addRectangle (face.getX(), c.y, face.getWidth(), wall);
@@ -120,6 +156,7 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
     g.fillEllipse (face);
 
     // Brushed spin highlight: two soft bright sectors across the face, like light on turned aluminium
+    if (! flat)
     {
         constexpr int sectors = 180;
         for (int i = 0; i < sectors; ++i)
@@ -147,9 +184,12 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
     }
 
     // Slightly concave face: a soft darker band just inside the rim
-    g.setGradientFill (juce::ColourGradient (juce::Colours::black.withAlpha (0.0f), c.x, c.y,
-                                             juce::Colours::black.withAlpha (0.08f), c.x + knobRadius, c.y, true));
-    g.fillEllipse (face);
+    if (! flat)
+    {
+        g.setGradientFill (juce::ColourGradient (juce::Colours::black.withAlpha (0.0f), c.x, c.y,
+                                                 juce::Colours::black.withAlpha (0.08f), c.x + knobRadius, c.y, true));
+        g.fillEllipse (face);
+    }
 
     // Chamfered edge: crisp highlight on top, darker on the bottom, plus a hairline dark outline
     g.setGradientFill (juce::ColourGradient (juce::Colours::white, c.x, face.getY(),
@@ -176,6 +216,7 @@ FreezeEditor::FreezeEditor (FreezeProcessor& p)
     setupKnob (amount, "Amount", "freeze");
     setupKnob (grain, "Grain", "grain");
     setupKnob (fx, "FX", "fx");
+    amount.slider.getProperties().set ("flat", true);
     amount.slider.onValueChange = [this] { updateLabel (amount); repaint(); };
 
     for (auto* button : { &previous, &next })
@@ -331,10 +372,11 @@ juce::Path FreezeEditor::splashShape (juce::Point<float> c, float radius, float 
 void FreezeEditor::drawSplash (juce::Graphics& g, juce::Point<float> c, float level) const
 {
     // Three nested splashes: a big pale one, a lighter middle one and the coloured core.
-    const float radius = kSplashRadius * (0.86f + 0.14f * level);
+    // Each layer grows with the amount; the outer layers grow the most, so turning up spreads the splash out.
+    const float radius = kSplashRadius * (0.8f + 0.2f * level);
     const float rough = 0.03f + 0.03f * level;
     const float wobble = 0.6f;
-    const float spread[3] = { 1.7f, 1.32f, 1.0f };
+    const float spread[3] = { 1.08f + 0.72f * level, 1.04f + 0.36f * level, 1.0f };
     const juce::Colour pale = accentLight.interpolatedWith (juce::Colours::white, 0.55f);
 
     for (int layer = 0; layer < 3; ++layer)
@@ -420,7 +462,7 @@ void FreezeEditor::resized()
     // Big Amount knob in the middle, Grain and FX side by side underneath it
     // Width sets the knob size; the extra height is room for the shadow
     const int middleY = (kHeaderHeight + getHeight()) / 2 - 10;
-    amount.slider.setBounds (centreX - 74, middleY - 74, 148, 160);
+    amount.slider.setBounds (centreX - 86, middleY - 86, 172, 180);
     grain.slider.setBounds (centreX - 64 - 22, getHeight() - 92, 44, 50);
     fx.slider.setBounds (centreX + 64 - 22, getHeight() - 92, 44, 50);
 
