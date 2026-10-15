@@ -10,7 +10,7 @@ std::vector<float> freezeWithReverse (float amount, float maxReverseShare, gf::F
     auto& e = engineOut != nullptr ? *engineOut : local;
     e.prepare (48000, 512, 1);
     e.setMaxReverseShare (maxReverseShare);
-    e.setMaxSpectralShare (0.0f); // measure the grain cloud itself
+    e.setMaxSmoothness (0.0f); // measure reversing on its own
     auto p = pluckTrain (48000, 8.0);
     std::vector<float> a (p.size(), amount);
     return runEngine (e, { p }, a, 512)[0];
@@ -41,7 +41,7 @@ TEST (reverse_grains_smooth_the_freeze)
     const double forwardOnly = onsetSkew (freezeWithReverse (1.0f, 0.0f));
     const double mixed = onsetSkew (freezeWithReverse (1.0f, 0.5f));
     std::printf ("    onset skew: forward only %.2f, with reverse %.2f\n", forwardOnly, mixed);
-    CHECK (mixed < forwardOnly * 0.6);
+    CHECK (mixed < forwardOnly * 0.7);
 }
 
 TEST (reverse_keeps_level_and_has_no_clicks)

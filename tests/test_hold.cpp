@@ -36,7 +36,7 @@ TEST (hold_ignores_new_input)
 TEST (without_hold_the_freeze_follows_new_input)
 {
     auto out = runHoldScenario (false);
-    const size_t from = 3 * 48000, to = 5 * 48000;
+    const size_t from = 4 * 48000, to = 5 * 48000; // the 1.5 s selection window has moved past the old notes
     const double old = toneLevel (out, from, to, 220.0, 48000), fresh = toneLevel (out, from, to, 880.0, 48000);
     std::printf ("    not held: 220 Hz %.5f, 880 Hz %.5f\n", old, fresh);
     CHECK (fresh > old * 10.0);
