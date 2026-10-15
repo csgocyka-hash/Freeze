@@ -13,7 +13,7 @@ std::vector<float> freezeSine (float detune, int blockSize = 512, float amount =
     e.prepare (sr, 512, 1);
     e.setSeed (seed);
     e.setDetune (detune);
-    e.setSpectralLevel (0.0f);
+    e.setFloorLevel (0.0f);
     auto s = sine (sr, 4.0, 440.0, 0.5f);
     std::vector<float> a (s.size(), amount);
     return runEngine (e, { s }, a, blockSize)[0];

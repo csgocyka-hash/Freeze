@@ -20,17 +20,7 @@ void FreezeEngine::prepare (double newSampleRate, int /*maxBlockSize*/, int numC
     for (int i = 0; i <= kWindowTableSize; ++i)
         window[(size_t) i] = (float) (0.5 - 0.5 * std::cos (kTwoPi * i / kWindowTableSize));
     fx.prepare (sampleRate, numChannels);
-
-    // 800 Hz second-order Butterworth high-pass (RBJ cookbook), run twice, for the spectral layer
-    {
-        const double w0 = kTwoPi * 800.0 / sampleRate, alpha = std::sin (w0) / (2.0 * 0.7071), cosw = std::cos (w0);
-        const double a0 = 1.0 + alpha;
-        hpB0 = (float) ((1.0 + cosw) / 2.0 / a0);
-        hpB1 = (float) (-(1.0 + cosw) / a0);
-        hpB2 = hpB0;
-        hpA1 = (float) (-2.0 * cosw / a0);
-        hpA2 = (float) ((1.0 - alpha) / a0);
-    }
+    grainPowerCoeff = (float) (1.0 - std::exp (-1.0 / (1.0 * sampleRate))); // 1 s
 
     channelState.assign ((size_t) std::max (1, numChannels), Channel {});
     for (auto& c : channelState)
@@ -40,7 +30,9 @@ void FreezeEngine::prepare (double newSampleRate, int /*maxBlockSize*/, int numC
         c.flat.assign (c.buffer.size(), 0.0f);
         c.segmentTime.assign ((size_t) bufferSegments, 0);
         c.energy.assign ((size_t) bufferSegments, 0.0f);
+        c.floor.prepare (sampleRate);
     }
+    setGrainSeconds (grainSeconds); // the floor's interval
     reset();
 }
 
@@ -67,10 +59,9 @@ void FreezeEngine::reset()
             g = Grain {};
         // Each channel draws its own grain positions, so left and right decorrelate.
         c.random.seed (seed * 0x9e3779b97f4a7c15ull + ch + 1);
-        c.spectral.prepare (sampleRate, seed * 0x2545f4914f6cdd1dull + ch + 1);
-        c.spectral.setHold (hold);
-        for (auto& st : c.hpState)
-            std::fill (std::begin (st), std::end (st), 0.0f);
+        c.floor.reset (seed * 0x2545f4914f6cdd1dull + ch + 1);
+        c.floorStale = true;
+        c.grainPower = 0.0f;
         c.nextSpawn = 0;
         c.reverseAccumulator = 0.5f;
     }
@@ -85,10 +76,10 @@ void FreezeEngine::setSeed (uint64_t newSeed)
 void FreezeEngine::setGrainSeconds (double seconds)
 {
     grainSeconds = std::clamp (seconds, 0.040, 0.500);
-    // The Grain knob also sets how fast the spectral layer follows new notes: 0.3 s to 4 s
+    // The Grain knob also sets how fast the floor follows new notes: a new loop every 0.3 s to 4 s
     const double t = std::log (grainSeconds / 0.040) / std::log (0.500 / 0.040);
     for (auto& c : channelState)
-        c.spectral.setSmoothingSeconds (0.3 * std::pow (4.0 / 0.3, t));
+        c.floor.setIntervalSeconds (0.3 * std::pow (4.0 / 0.3, t));
 }
 
 void FreezeEngine::setDensity (double grainsOverlapping)
@@ -127,9 +118,7 @@ double FreezeEngine::readDistance (const Channel& c, int64_t readIndex, bool rev
 
 void FreezeEngine::setHold (bool shouldHold)
 {
-    hold = shouldHold;
-    for (auto& c : channelState)
-        c.spectral.setHold (shouldHold);
+    hold = shouldHold; // (the floor reads the recording, so it holds too)
 }
 
 void FreezeEngine::setDetune (float amount)
@@ -143,23 +132,30 @@ float FreezeEngine::sourceAt (const Channel& c, int64_t index, float flatMix)
     return flatMix > 0.0f ? c.buffer[i] + (c.flat[i] - c.buffer[i]) * flatMix : c.buffer[i];
 }
 
-void FreezeEngine::setSpectralLevel (float level)
+void FreezeEngine::setFloorLevel (float level)
 {
-    spectralLevel = std::max (0.0f, level);
+    floorLevel = std::max (0.0f, level);
 }
 
-float FreezeEngine::highPass (Channel& c, float x)
+void FreezeEngine::fillFloorFrame (Channel& c, int frame)
 {
-    for (auto& st : c.hpState) // two identical stages: 24 dB per octave below 800 Hz
+    // The floor's spectrum is the average of SpectralFloor::kFrames frames of the flattened copy (the notes'
+    // bodies), spread over the material the grains choose from, so it holds the same notes as the cloud.
+    // Frames reach no further back than the material (zeros before it). (The newest segment is not
+    // flattened yet.)
+    constexpr int frames = SpectralFloor::kFrames;
+    const auto capacity = (int64_t) c.flat.size();
+    const int64_t end = std::max<int64_t> (0, c.committedSegments - 1) * segmentLength;
+    const int64_t span = std::min<int64_t> ({ end, (int64_t) std::lround (kSelectSeconds * sampleRate), capacity - segmentLength });
+    const int n = c.floor.frameSize();
+    const int64_t frameEnd = end - std::max<int64_t> (0, span - n) * frame / (frames - 1);
+    float* x = c.floor.frameInput();
+    for (int i = 0; i < n; ++i)
     {
-        const float y = hpB0 * x + hpB1 * st[0] + hpB2 * st[1] - hpA1 * st[2] - hpA2 * st[3];
-        st[1] = st[0];
-        st[0] = x;
-        st[3] = st[2];
-        st[2] = y;
-        x = y;
+        const int64_t index = frameEnd - n + i;
+        x[i] = index >= end - span ? c.flat[(size_t) (index % capacity)] : 0.0f;
     }
-    return x;
+    c.floor.addFrame();
 }
 
 void FreezeEngine::setMaxSmoothness (float amount)
@@ -502,14 +498,8 @@ void FreezeEngine::process (float* const* channels, int numChannels, int numSamp
 
     for (int i = 0; i < numSamples; ++i)
     {
-        // The spectral layer always listens, so it is ready the moment Amount goes up
-        float spectralOut[2] {};
         for (int ch = 0; ch < numChannels; ++ch)
-        {
-            auto& c = channelState[(size_t) ch];
-            c.staging[(size_t) stagingFill] = channels[ch][i];
-            spectralOut[std::min (ch, 1)] = highPass (c, c.spectral.processSample (channels[ch][i]));
-        }
+            channelState[(size_t) ch].staging[(size_t) stagingFill] = channels[ch][i];
 
         if (++stagingFill == segmentLength)
         {
@@ -537,8 +527,22 @@ void FreezeEngine::process (float* const* channels, int numChannels, int numSamp
                     c.nextSpawn += nextSpawnInterval (c);
                 }
                 float wet = renderGrains (c);
-                if (smoothness > 0.0f)
-                    wet += spectralOut[std::min (ch, 1)] * spectralLevel * smoothness; // airy shimmer in parallel
+                c.grainPower += grainPowerCoeff * (wet * wet - c.grainPower);
+                if (smoothness > 0.0f && floorLevel > 0.0f)
+                {
+                    // The floor under the grains, at floorLevel of their level: started afresh (it fades in)
+                    // when smooth mode begins
+                    if (c.floorStale)
+                    {
+                        c.floor.clear();
+                        c.floorStale = false;
+                    }
+                    if (const int frame = c.floor.pendingFrame(); frame >= 0)
+                        fillFloorFrame (c, frame);
+                    wet += c.floor.processSample() * std::sqrt (c.grainPower) * floorLevel * smoothness;
+                }
+                else
+                    c.floorStale = true;
                 if (fxAmount != nullptr)
                 {
                     const float f = fxAmount[i];
@@ -564,6 +568,7 @@ void FreezeEngine::process (float* const* channels, int numChannels, int numSamp
             for (auto& g : c.grains)
                 g.active = false;
             c.nextSpawn = sampleCounter;
+            c.grainPower = 0.0f;
         }
 }
 } // namespace gf

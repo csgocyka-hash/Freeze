@@ -3,7 +3,7 @@
 // JUCE-free and real-time safe: everything is allocated in prepare().
 #include "Fx.h"
 #include "Random.h"
-#include "SpectralFreeze.h"
+#include "SpectralFloor.h"
 #include <cmath>
 #include <cstdint>
 #include <vector>
@@ -48,9 +48,10 @@ public:
     // envelopes (attack and decay) are flattened and whose note starts are faded in, so no pluck is left.
     void setMaxSmoothness (float amount);
 
-    // Level of the high-passed spectral freeze layered in parallel with the grains near full Amount,
-    // relative to the grains (default 0.2 = 20 %). It adds an airy, steady shimmer on top of the cloud.
-    void setSpectralLevel (float level);
+    // Level of the random-phase spectral floor under the grains in smooth mode (faded in with smoothness),
+    // relative to the grains (default 0.25 = 25 %). It is a steady, seamless version of the material
+    // (see SpectralFloor) that glues the grains together and fills the moments where they cancel out.
+    void setFloorLevel (float level);
 
     // Grains spawned since reset() (diagnostic).
     int64_t grainsSpawnedCount() const { return grainsSpawned; }
@@ -98,8 +99,9 @@ private:
         float flatEnvelope = 0.0f;    // peak envelope used for flattening (instant attack, 40 ms release)
         int fadeInRemaining = 0;      // de-click fade-in carried over into the next segment
         int pendingDip = -1;          // a note start found just past the end of the last flattened segment
-        SpectralFreeze spectral;
-        float hpState[2][4] {}; // two cascaded high-pass stages (x1, x2, y1, y2) for the spectral layer
+        SpectralFloor floor;
+        bool floorStale = true;  // the floor was silent (smooth mode off) and starts afresh when it returns
+        float grainPower = 0.0f; // slow mean square of the grains, which the floor is scaled to
         std::vector<float> energy;    // RMS per buffer segment
         int64_t committedSegments = 0;
         Grain grains[kMaxGrains];
@@ -127,10 +129,10 @@ private:
     float maxReverseShare = 0.5f;
     float maxSmoothness = 1.0f;
     float smoothness = 0.0f; // current, from Amount
-    float spectralLevel = 0.2f;
+    float floorLevel = 0.25f;
     float detune = 0.0f;
-    float hpB0 = 1.0f, hpB1 = 0.0f, hpB2 = 0.0f, hpA1 = 0.0f, hpA2 = 0.0f; // 800 Hz high-pass, used twice (24 dB/oct)
-    float highPass (Channel& c, float x);
+    void fillFloorFrame (Channel& c, int frame);
+    float grainPowerCoeff = 0.0f;
     int64_t grainsSpawned = 0, grainsReversed = 0, grainsClose = 0;
     double readDistance (const Channel& c, int64_t readIndex, bool reverse, const Grain* ignore) const;
     FxChain fx;
