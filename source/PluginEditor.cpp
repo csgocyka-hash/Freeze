@@ -32,7 +32,7 @@ juce::Path taperedArc (juce::Point<float> c, float radius, float startAngle, flo
     return p;
 }
 
-// Montserrat: ExtraLight for the wordmark, Medium for the preset name, SemiBold for labels
+// Montserrat: ExtraLight for the wordmark, Light in spaced capitals for the preset name and labels
 juce::FontOptions uiFont (float height, const juce::String& style)
 {
     const auto& set = FreezeEditor::fonts();
@@ -319,9 +319,9 @@ FreezeEditor::FontSet& FreezeEditor::fonts()
 {
     static FontSet set = [] {
         auto load = [] (const char* data, int size) { return juce::Typeface::createSystemTypefaceFor (data, (size_t) size); };
+        auto light = load (BinaryData::MontserratLight_ttf, BinaryData::MontserratLight_ttfSize);
         return FontSet { load (BinaryData::MontserratExtraLight_ttf, BinaryData::MontserratExtraLight_ttfSize),
-                         load (BinaryData::MontserratMedium_ttf, BinaryData::MontserratMedium_ttfSize),
-                         load (BinaryData::MontserratSemiBold_ttf, BinaryData::MontserratSemiBold_ttfSize) };
+                         light, light, true };
     }();
     return set;
 }

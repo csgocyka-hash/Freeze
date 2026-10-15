@@ -212,3 +212,18 @@ TEST (editor_uses_embedded_montserrat)
     if (fonts.light != nullptr)
         CHECK (fonts.light->getName().containsIgnoreCase ("Montserrat"));
 }
+
+TEST (labels_are_spaced_capitals_in_montserrat_light)
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FreezeProcessor p;
+    std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
+    CHECK (FreezeEditor::fonts().capitals);
+    if (FreezeEditor::fonts().medium != nullptr)
+        CHECK (FreezeEditor::fonts().medium->getStyle().containsIgnoreCase ("Light"));
+    bool foundGrain = false;
+    for (auto* child : editor->getChildren())
+        if (auto* label = dynamic_cast<juce::Label*> (child))
+            foundGrain = foundGrain || label->getText() == "GRAIN";
+    CHECK (foundGrain);
+}
