@@ -65,7 +65,7 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
     const float angle = startAngle + sliderPos * (endAngle - startAngle);
 
     // Geometry, outside in: value triangle, white ring, tick marks, knob
-    const float triangleSize = juce::jmax (3.5f, size * 0.055f);
+    const float triangleSize = juce::jmax (3.5f, size * 0.055f); // margin outside the ring (kept so the knob size stays)
     const float ringRadius = size * 0.5f - triangleSize - 1.5f;
     const float tickOuter = ringRadius - juce::jmax (2.0f, size * 0.035f);
     const float tickLength = juce::jmax (2.5f, size * 0.05f);
@@ -79,16 +79,6 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
     {
         g.setColour (juce::Colours::white);
         g.fillPath (taperedArc (c, ringRadius, startAngle, endAngle, ringStartWidth, sliderPos));
-    }
-    if (flat) // the triangle marker is only on the big knob
-    {
-        juce::Path tri;
-        tri.addTriangle (0.0f, -(ringRadius + 0.5f), -triangleSize * 0.62f, -(ringRadius + triangleSize * 1.15f),
-                         triangleSize * 0.62f, -(ringRadius + triangleSize * 1.15f));
-        tri.applyTransform (juce::AffineTransform::rotation (angle).translated (c));
-        juce::DropShadow (juce::Colour (0x40000000), 3, { 0, 1 }).drawForPath (g, tri);
-        g.setColour (juce::Colours::white);
-        g.fillPath (tri);
     }
 
     // Hairline tick marks: solid white at the outer end, fading out towards the knob
