@@ -4,6 +4,7 @@
 #include "Fx.h"
 #include "Random.h"
 #include "SpectralFloor.h"
+#include "Tone.h"
 #include <cmath>
 #include <cstdint>
 #include <vector>
@@ -38,6 +39,15 @@ constexpr int kSpacingTries = 16;
 constexpr float kDiffusionStart = 0.7f;
 constexpr float kDiffuserGain = 0.6f;
 constexpr int kDiffuserStages = 4;
+
+// Preset behaviours on top of the freeze
+enum class EngineMode
+{
+    normal,
+    rhythm, // the frozen sound steps to a new slice of the recording on every tempo division
+    pulse,  // the frozen sound pulses in volume, faster as Amount rises (or at its own time when unlinked)
+    follow  // the frozen sound plays only while the input plays (or, inverted, only while it is silent)
+};
 
 class FreezeEngine
 {
@@ -86,6 +96,20 @@ public:
     // Hold: stop recording new input, so the grains keep playing the sound captured so far.
     void setHold (bool shouldHold);
 
+    // Preset behaviours
+    void setMode (EngineMode);
+    void setTempo (double beatsPerMinute);       // host tempo, for Rhythm and Pulse (default 120)
+    void setRhythmBeats (double beats);           // Rhythm step length in beats (1/8 = 0.5, 1/4 = 1, 1 bar = 4)
+    void setPulse (bool unlinked, float time);    // Pulse: unlinked = speed from `time` (0..1) instead of Amount
+    void setFollowInvert (bool invert);           // Follow: play only while the input is silent
+    void setOctaveShare (float share);            // share of grains played an octave up (0..1)
+    void setTone (const ToneCharacter&);          // EQ, saturation, chorus and width of the frozen sound
+
+    // Pulse cycle length in beats for a speed of 0..1: from a 1/2 note (2 beats) to a 1/64 note
+    static double pulseBeats (float speed) { return 2.0 * std::pow (1.0 / 32.0, (double) speed); }
+
+    int64_t rhythmSteps() const { return rhythmStepCount; } // (diagnostic)
+
     // In place. freezeAmount and fxAmount hold smoothed knob values (0..1) per sample; fxAmount may be null.
     void process (float* const* channels, int numChannels, int numSamples, const float* freezeAmount,
                   const float* fxAmount = nullptr);
@@ -105,6 +129,7 @@ private:
         double rate = 1.0;    // playback speed (detune); 1 = original pitch
         bool diffuse = false; // plays through the diffuser
         bool active = false;
+        int release = 0;      // samples left of a quick fade-out (Rhythm steps); 0 = not releasing
     };
 
     struct Channel
@@ -118,6 +143,7 @@ private:
         int sinceDip = 1 << 30;       // samples since the last note start or join (attack gap and fade-in)
         int pendingDip = -1;          // a note start found just past the end of the last flattened segment
         SpectralFloor floor;
+        int64_t anchor = -1;      // Rhythm: the slice the grains read from until the next step
         bool floorStale = true;  // the floor was silent (smooth mode off) and starts afresh when it returns
         float grainPower = 0.0f; // slow mean square of the grains, which the floor is scaled to
         std::vector<float> energy;    // RMS per buffer segment
@@ -154,6 +180,15 @@ private:
     float maxDiffusion = 1.0f;
     float smoothness = 0.0f; // current, from Amount
     float floorLevel = 0.25f;
+
+    EngineMode mode = EngineMode::normal;
+    double tempo = 120.0, rhythmBeats = 1.0, rhythmPosition = 0.0, pulsePhase = 0.0;
+    int64_t rhythmStepCount = 0;
+    bool pulseUnlinked = false, followInvert = false;
+    float pulseTime = 0.0f, octaveShare = 0.0f, followEnvelope = 0.0f, followAttack = 0.0f, followRelease = 0.0f;
+    int releaseLength = 480;
+    Tone tone;
+    float modeGain (float amount, float input);
     float detune = 0.0f;
     void fillFloorFrame (Channel& c, int frame);
     float grainPowerCoeff = 0.0f;

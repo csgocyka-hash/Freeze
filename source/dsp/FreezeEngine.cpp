@@ -20,6 +20,10 @@ void FreezeEngine::prepare (double newSampleRate, int /*maxBlockSize*/, int numC
     for (int i = 0; i <= kWindowTableSize; ++i)
         window[(size_t) i] = (float) (0.5 - 0.5 * std::cos (kTwoPi * i / kWindowTableSize));
     fx.prepare (sampleRate, numChannels);
+    tone.prepare (sampleRate, numChannels);
+    releaseLength = std::max (1, (int) std::lround (0.010 * sampleRate)); // Rhythm steps: 10 ms fade
+    followAttack = (float) (1.0 - std::exp (-1.0 / (0.005 * sampleRate)));
+    followRelease = (float) (1.0 - std::exp (-1.0 / (0.150 * sampleRate)));
     grainPowerCoeff = (float) (1.0 - std::exp (-1.0 / (1.0 * sampleRate))); // 1 s
 
     channelState.assign ((size_t) std::max (1, numChannels), Channel {});
@@ -47,6 +51,10 @@ void FreezeEngine::reset()
 {
     stagingFill = 0;
     sampleCounter = 0;
+    rhythmPosition = pulsePhase = 0.0;
+    rhythmStepCount = 0;
+    followEnvelope = 0.0f;
+    tone.reset();
     grainsSpawned = grainsReversed = grainsClose = 0;
     bypassed = false;
     fx.reset();
@@ -70,6 +78,7 @@ void FreezeEngine::reset()
         c.floorStale = true;
         c.grainPower = 0.0f;
         c.nextSpawn = 0;
+        c.anchor = -1;
         c.reverseAccumulator = 0.5f;
         c.diffuseAccumulator = 0.5f;
         for (int k = 0; k < kDiffuserStages; ++k)
@@ -147,6 +156,73 @@ float FreezeEngine::diffuse (Channel& c, float x)
         x = delayed - kDiffuserGain * v;
     }
     return x;
+}
+
+void FreezeEngine::setMode (EngineMode newMode)
+{
+    mode = newMode;
+}
+
+void FreezeEngine::setTempo (double beatsPerMinute)
+{
+    tempo = std::clamp (beatsPerMinute, 20.0, 400.0);
+}
+
+void FreezeEngine::setRhythmBeats (double beats)
+{
+    rhythmBeats = std::max (0.125, beats);
+}
+
+void FreezeEngine::setPulse (bool unlinked, float time)
+{
+    pulseUnlinked = unlinked;
+    pulseTime = std::clamp (time, 0.0f, 1.0f);
+}
+
+void FreezeEngine::setFollowInvert (bool invert)
+{
+    followInvert = invert;
+}
+
+void FreezeEngine::setOctaveShare (float share)
+{
+    octaveShare = std::clamp (share, 0.0f, 1.0f);
+}
+
+void FreezeEngine::setTone (const ToneCharacter& character)
+{
+    tone.setCharacter (character);
+}
+
+float FreezeEngine::modeGain (float amount, float input)
+{
+    if (mode == EngineMode::pulse)
+    {
+        // A smooth volume pulse synced to tempo. Faster pulses get a higher minimum level so they never click;
+        // linked to Amount, it fades out entirely towards 100 %, leaving the freeze static.
+        const float speed = pulseUnlinked ? pulseTime : amount;
+        pulsePhase = std::fmod (pulsePhase + tempo / 60.0 / pulseBeats (speed) / sampleRate, 1.0);
+        const float lfo = 0.5f + 0.5f * (float) std::cos (kTwoPi * pulsePhase);
+        float depth = 1.0f - 0.8f * std::pow (speed, 1.5f);
+        if (! pulseUnlinked)
+        {
+            const float t = std::clamp ((amount - 0.85f) / 0.15f, 0.0f, 1.0f);
+            depth *= 1.0f - t * t * (3.0f - 2.0f * t);
+        }
+        return 1.0f - depth * (1.0f - lfo);
+    }
+    if (mode == EngineMode::follow)
+    {
+        // Follow the input's level (5 ms attack, 150 ms release) relative to its usual sounding level
+        const float level = std::abs (input);
+        followEnvelope += (level > followEnvelope ? followAttack : followRelease) * (level - followEnvelope);
+        float reference = 0.0f;
+        for (const auto& c : channelState)
+            reference = std::max (reference, c.levelReference);
+        const float g = reference > 0.0f ? std::clamp (followEnvelope / (0.6f * 1.4142f * reference), 0.0f, 1.0f) : 0.0f;
+        return followInvert ? 1.0f - g : g;
+    }
+    return 1.0f;
 }
 
 void FreezeEngine::setHold (bool shouldHold)
@@ -352,6 +428,9 @@ void FreezeEngine::spawnGrain (Channel& c, float amount)
     // ones so that a whole grain fits before the write head (a reversed grain may sit up to half a grain
     // later, see below, so it leaves out twice as many). Early on, with little material recorded, a
     // reversed grain falls back to forward and a long grain to a shorter one.
+    // Octave: some grains play an octave up, reading twice as far (no random draw when off)
+    const bool octaveUp = octaveShare > 0.0f && c.random.uniform() < (double) octaveShare;
+
     int grainLength = std::max (2, (int) std::lround (currentGrainSeconds() * sampleRate));
     const int64_t windowSegments = (int64_t) std::lround (kSelectSeconds / kSegmentSeconds);
     int64_t halfGrainSegments = 0, first = 0, last = 0;
@@ -360,7 +439,8 @@ void FreezeEngine::spawnGrain (Channel& c, float amount)
     {
         // +1: the newest segment's flattened copy is only made once the next one arrives. Detuned grains
         // read up to 3 % further (plus interpolation neighbours), so they keep a little more distance.
-        const int reach = detune > 0.0f ? (int) std::ceil (grainLength * 0.515) + 3 : grainLength / 2;
+        const int reach = octaveUp ? (int) std::ceil (grainLength * (2.0 * (detune > 0.0f ? 1.03 : 1.0) - 0.5)) + 3
+                          : detune > 0.0f ? (int) std::ceil (grainLength * 0.515) + 3 : grainLength / 2;
         halfGrainSegments = (reach + segmentLength - 1) / segmentLength + 1;
         last = c.committedSegments - halfGrainSegments * (reverse ? 2 : 1); // exclusive
         first = std::max<int64_t> (halfGrainSegments, c.committedSegments - windowSegments);
@@ -431,7 +511,16 @@ void FreezeEngine::spawnGrain (Channel& c, float amount)
     // forms a comb filter with it. Up to kSpacingTries spots are tried; the first far enough (or else the
     // farthest) wins. (Below 50 % Amount nothing changes, not even the random draws.)
     int64_t start = candidateStart();
-    if (smoothness > 0.0f)
+    if (mode == EngineMode::rhythm)
+    {
+        // Rhythm: all grains read one slice (picked afresh at each step), with a little jitter so they
+        // don't stack into a comb
+        const int64_t lowest = first * segmentLength - grainLength / 2, highest = last * segmentLength;
+        if (c.anchor < lowest || c.anchor >= highest)
+            c.anchor = start;
+        start = std::clamp<int64_t> (c.anchor + c.random.below (2 * segmentLength) - segmentLength, lowest, highest - 1);
+    }
+    else if (smoothness > 0.0f)
     {
         const double minDistance = kMinReadSpacingSeconds * sampleRate;
         double best = distanceFor (start);
@@ -453,6 +542,8 @@ void FreezeEngine::spawnGrain (Channel& c, float amount)
     double rate = 1.0;
     if (detune > 0.0f)
         rate = std::pow (2.0, (2.0 * c.random.uniform() - 1.0) * 50.0 * detune / 1200.0);
+    if (octaveUp)
+        rate *= 2.0;
 
     // Level-match the grain: its windowed RMS is brought towards the recent input level (within +-6 dB),
     // so short grains on loud attacks are not louder than long grains over whole notes. Smooth grains may be
@@ -478,6 +569,7 @@ void FreezeEngine::spawnGrain (Channel& c, float amount)
     voice->flatMix = smoothness;
     voice->rate = rate;
     voice->active = true;
+    voice->release = 0;
 
     // Diffused grains (part of smooth mode): none below kDiffusionStart Amount, all at full Amount, spread
     // evenly in between
@@ -523,8 +615,11 @@ float FreezeEngine::renderGrains (Channel& c, float& diffused)
             const float c3 = 0.5f * (x2 - xm1) + 1.5f * (x0 - x1);
             x = ((c3 * frac + c2) * frac + c1) * frac + x0;
         }
-        (g.diffuse ? toDiffuse : sum) += x * w * g.gain;
-        if (++g.age >= g.length)
+        float fade = 1.0f;
+        if (g.release > 0) // quick fade-out on a Rhythm step
+            fade = (float) g.release / (float) releaseLength;
+        (g.diffuse ? toDiffuse : sum) += x * w * g.gain * fade;
+        if (++g.age >= g.length || (g.release > 0 && --g.release == 0))
             g.active = false;
     }
     // Power-sum normalisation for uncorrelated Hann grains at the actual overlap
@@ -564,6 +659,31 @@ void FreezeEngine::process (float* const* channels, int numChannels, int numSamp
             const float t = std::clamp ((freezeAmount[i] - 0.5f) * 2.0f, 0.0f, 1.0f);
             smoothness = maxSmoothness * t * t * (3.0f - 2.0f * t);
 
+            // Rhythm: on each tempo division, fade the playing grains out and start on a new slice
+            if (mode == EngineMode::rhythm)
+            {
+                rhythmPosition += tempo / 60.0 / sampleRate;
+                if (rhythmPosition >= rhythmBeats)
+                {
+                    rhythmPosition -= rhythmBeats;
+                    ++rhythmStepCount;
+                    for (int ch = 0; ch < numChannels; ++ch)
+                    {
+                        auto& c = channelState[(size_t) ch];
+                        c.anchor = -1;
+                        c.nextSpawn = sampleCounter;
+                        for (auto& g : c.grains)
+                            if (g.active && g.release == 0)
+                                g.release = releaseLength;
+                    }
+                }
+            }
+
+            float input = 0.0f;
+            for (int ch = 0; ch < numChannels; ++ch)
+                input += channels[ch][i] / (float) numChannels;
+            float wetFrame[2] {};
+
             for (int ch = 0; ch < numChannels; ++ch)
             {
                 auto& c = channelState[(size_t) ch];
@@ -597,8 +717,15 @@ void FreezeEngine::process (float* const* channels, int numChannels, int numSamp
                     const float effect = fx.processSample (ch, wet);
                     wet = (wet + f * effect) / std::sqrt (1.0f + f * f);
                 }
-                channels[ch][i] = channels[ch][i] * dryGain + wet * wetGain;
+                wetFrame[std::min (ch, 1)] = wet;
             }
+
+            // The frozen sound's own tone (EQ, saturation, chorus, width), then the preset's gain (Pulse, Follow)
+            float* frame[2] = { &wetFrame[0], &wetFrame[1] };
+            tone.process (frame, std::min (numChannels, 2), 1);
+            const float gain = modeGain (freezeAmount[i], input);
+            for (int ch = 0; ch < numChannels; ++ch)
+                channels[ch][i] = channels[ch][i] * dryGain + wetFrame[std::min (ch, 1)] * gain * wetGain;
         }
 
         ++sampleCounter;
