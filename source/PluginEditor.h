@@ -65,7 +65,6 @@ public:
         bool capitals = false; // preset name and labels in spaced capitals
     };
     static FontSet& fonts();
-    void showNoiseValue (bool shouldShow); // also used by the snapshot tool
     void resized() override;
 
 private:
@@ -99,7 +98,6 @@ private:
     juce::Label presetName;
     SnowflakeButton snowflake;
     NoiseControl noiseControl;
-    juce::Label noiseValue; // shows the Noise level beside the dots while dragging
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> holdAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> noiseAttachment;
     std::vector<Shard> shards;

@@ -262,19 +262,8 @@ FreezeEditor::FreezeEditor (FreezeProcessor& p)
     holdAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (freezeProcessor.apvts, "hold", snowflake);
     addAndMakeVisible (snowflake);
     noiseAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (freezeProcessor.apvts, "noise", noiseControl);
-    noiseControl.onValueChange = [this] {
-        noiseValue.setText (freezeProcessor.apvts.getParameter ("noise")->getCurrentValueAsText(), juce::dontSendNotification);
-        noiseControl.repaint();
-    };
-    noiseControl.onDragStart = [this] { showNoiseValue (true); };
-    noiseControl.onDragEnd = [this] { showNoiseValue (false); };
+    noiseControl.onValueChange = [this] { noiseControl.repaint(); }; // the dot fill shows the level
     addAndMakeVisible (noiseControl);
-
-    noiseValue.setFont (uiFont (11.0f, "Demi Bold"));
-    noiseValue.setJustificationType (juce::Justification::centredLeft);
-    noiseValue.setInterceptsMouseClicks (false, false);
-    noiseValue.setText (freezeProcessor.apvts.getParameter ("noise")->getCurrentValueAsText(), juce::dontSendNotification);
-    addChildComponent (noiseValue);
 
     // Shards scattered around the hexagon edge; fixed seed so the splash always looks the same.
     juce::Random rng (2026);
@@ -362,11 +351,6 @@ FreezeEditor::FontSet& FreezeEditor::fonts()
     return set;
 }
 
-void FreezeEditor::showNoiseValue (bool shouldShow)
-{
-    noiseValue.setVisible (shouldShow);
-}
-
 void FreezeEditor::stepPreset (int delta)
 {
     const int index = (freezeProcessor.currentPreset() + delta + gf::kNumPresets) % gf::kNumPresets;
@@ -395,7 +379,6 @@ void FreezeEditor::applyPresetColours()
     noiseControl.accent = accent;
     noiseControl.accentLight = accentLight;
     noiseControl.repaint();
-    noiseValue.setColour (juce::Label::textColourId, accentDeep);
 
     presetName.setText (labelText (preset.name), juce::dontSendNotification);
     presetName.setColour (juce::Label::textColourId, ink);
@@ -576,7 +559,6 @@ void FreezeEditor::resized()
     next.setBounds (presetName.getRight() + 2, 8, 26, 24);
     snowflake.setBounds (getWidth() - 48, 0, 40, 40);
     noiseControl.setBounds (8, getHeight() - 54, 46, 46); // bottom-left corner, opposite the snowflake
-    noiseValue.setBounds (noiseControl.getRight() + 2, noiseControl.getY() + 10, 60, 20);
 
     // Big Amount knob in the middle, Grain and FX side by side underneath it
     // Width sets the knob size; the extra height is room for the shadow

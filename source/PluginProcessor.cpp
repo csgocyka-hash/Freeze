@@ -100,8 +100,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout FreezeProcessor::createLayou
     layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "hold", 1 }, "Freeze", false)); // the snowflake
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { "noise", 1 }, "Noise", juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f,
-        juce::AudioParameterFloatAttributes().withStringFromValueFunction (
-            [] (float value, int) { return juce::String (juce::roundToInt (value * 100.0f)); }))); // the dot control, 0-100
+        juce::AudioParameterFloatAttributes().withStringFromValueFunction (percent))); // the dot control
     return layout;
 }
 
