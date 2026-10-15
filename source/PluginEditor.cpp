@@ -216,12 +216,21 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
     }
     if (flat)
     {
-        // Big knob: a light grey needle that tapers to a sharp point at its outer end
-        const auto base = c.getPointOnCircumference (knobRadius * 0.16f, angle);
-        const auto tip = c.getPointOnCircumference (knobRadius * 0.86f, angle);
-        const auto side = juce::Point<float> (std::cos (angle), std::sin (angle)) * (juce::jmax (1.0f, knobRadius * 0.03f));
+        // Big knob: a light grey line of even width that narrows a little over its last stretch,
+        // to a slightly blunt tip
+        const auto direction = juce::Point<float> (std::sin (angle), -std::cos (angle));
+        const auto side = juce::Point<float> (std::cos (angle), std::sin (angle)) * juce::jmax (0.9f, knobRadius * 0.022f);
+        const auto base = c + direction * (knobRadius * 0.16f);
+        const auto taperStart = c + direction * (knobRadius * 0.72f);
+        const auto tip = c + direction * (knobRadius * 0.86f);
         juce::Path needle;
-        needle.addTriangle (base + side, base - side, tip);
+        needle.startNewSubPath (base + side);
+        needle.lineTo (taperStart + side);
+        needle.lineTo (tip + side * 0.35f);
+        needle.lineTo (tip - side * 0.35f);
+        needle.lineTo (taperStart - side);
+        needle.lineTo (base - side);
+        needle.closeSubPath();
         g.setColour (juce::Colours::white.withAlpha (0.8f));
         g.fillPath (needle, juce::AffineTransform::translation (0.0f, 0.5f));
         g.setColour (juce::Colour (0xffa7acb4));
