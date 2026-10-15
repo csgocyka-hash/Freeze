@@ -11,8 +11,9 @@ cmake --build build-universal --target Freeze_VST3 >> build-universal.log
 VST="build-universal/Freeze_artefacts/Release/VST3/Freeze.vst3"
 VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$VST/Contents/Info.plist")
 STAGE="dist/stage/Freeze $VERSION"
-rm -rf dist/stage && mkdir -p "$STAGE"
+rm -rf dist/stage && mkdir -p "$STAGE/Licenses"
 ditto "$VST" "$STAGE/Freeze.vst3"
+cp resources/fonts/OFL.txt "$STAGE/Licenses/Montserrat-OFL.txt"
 cat > "$STAGE/Install.txt" <<TXT
 Freeze $VERSION  (VST3, macOS 11+, Apple silicon and Intel)
 

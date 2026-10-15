@@ -54,8 +54,9 @@ jobs:
         run: |
           version=$(sed -n 's/project(Freeze VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
           stage="dist/Freeze $version"
-          mkdir -p "$stage"
+          mkdir -p "$stage/Licenses"
           cp -R "build/Freeze_artefacts/Release/VST3/Freeze.vst3" "$stage/"
+          cp resources/fonts/OFL.txt "$stage/Licenses/Montserrat-OFL.txt"
           if [ "$RUNNER_OS" = "Windows" ]; then
             printf 'Freeze %s (VST3, Windows 10+, 64-bit)\r\n\r\n1. Move Freeze.vst3 into C:\\Program Files\\Common Files\\VST3\r\n2. Open your DAW and rescan plugins. Freeze is listed under "fouren".\r\n' "$version" > "$stage/Install.txt"
             (cd dist && 7z a -tzip "Freeze-$version-windows.zip" "Freeze $version" > /dev/null)

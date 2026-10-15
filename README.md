@@ -55,6 +55,10 @@ For a Mac download zip (Apple silicon and Intel): `scripts/package-mac.sh` → `
 | `tests/` | Unit tests (run by `scripts/build.sh`) |
 | `docs/superpowers/` | Design spec and implementation plan |
 
+## Fonts and knob design
+
+The UI uses Montserrat (ExtraLight, Medium, SemiBold), embedded in the plugin so it looks the same on macOS and Windows. Montserrat is under the SIL Open Font License; the licence is in `resources/fonts/OFL.txt` and ships in the download zips. The knob started from KnobGallery item #1349 (CC0), see `resources/knobs/CREDITS.md`.
+
 ## Licence note
 
 JUCE is licensed under AGPLv3 or a commercial licence. Check its terms before distributing the plugin.

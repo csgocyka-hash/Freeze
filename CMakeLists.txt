@@ -38,6 +38,10 @@ if(GF_BUILD_PLUGIN)
     endif()
 
     set(GF_PLUGIN_SOURCES source/PluginProcessor.cpp source/PluginEditor.cpp)
+
+    # Embedded Montserrat (SIL OFL), so the UI looks the same on every system
+    file(GLOB GF_FONTS CONFIGURE_DEPENDS resources/fonts/*.ttf)
+    juce_add_binary_data(FreezeAssets SOURCES ${GF_FONTS})
     set(GF_JUCE_DEFINES JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0 JUCE_DISPLAY_SPLASH_SCREEN=0)
 
     juce_add_plugin(Freeze
@@ -56,7 +60,7 @@ if(GF_BUILD_PLUGIN)
     target_sources(Freeze PRIVATE ${GF_PLUGIN_SOURCES})
     target_compile_definitions(Freeze PUBLIC ${GF_JUCE_DEFINES})
     target_link_libraries(Freeze
-        PRIVATE freeze_dsp juce::juce_audio_utils
+        PRIVATE freeze_dsp FreezeAssets juce::juce_audio_utils
         PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_lto_flags juce::juce_recommended_warning_flags)
 
     # Processor and editor tests (need JUCE, so they live in their own binary)
@@ -65,7 +69,7 @@ if(GF_BUILD_PLUGIN)
     target_include_directories(freeze_plugin_tests PRIVATE source)
     target_compile_definitions(freeze_plugin_tests PRIVATE ${GF_JUCE_DEFINES} JucePlugin_Name="Freeze")
     target_link_libraries(freeze_plugin_tests
-        PRIVATE freeze_dsp juce::juce_audio_utils
+        PRIVATE freeze_dsp FreezeAssets juce::juce_audio_utils
         PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
     add_test(NAME freeze_plugin_tests COMMAND freeze_plugin_tests)
 endif()
@@ -85,6 +89,6 @@ if(GF_BUILD_PLUGIN)
     target_include_directories(snapshot PRIVATE source)
     target_compile_definitions(snapshot PRIVATE ${GF_JUCE_DEFINES} JucePlugin_Name="Freeze")
     target_link_libraries(snapshot
-        PRIVATE freeze_dsp juce::juce_audio_utils
+        PRIVATE freeze_dsp FreezeAssets juce::juce_audio_utils
         PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 endif()

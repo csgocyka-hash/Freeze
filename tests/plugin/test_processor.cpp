@@ -1,5 +1,6 @@
 #include "../Check.h"
 #include "../Signals.h"
+#include "PluginEditor.h"
 #include "PluginProcessor.h"
 #include "dsp/Presets.h"
 #include <juce_audio_utils/juce_audio_utils.h>
@@ -199,4 +200,15 @@ TEST (editor_has_three_knobs)
     CHECK (std::abs (knobs[0]->getBounds().getCentreX() - editor->getWidth() / 2) <= 1);
     CHECK (knobs[1]->getY() > knobs[0]->getBottom() - 10);
     CHECK (knobs[2]->getY() > knobs[0]->getBottom() - 10);
+}
+
+TEST (editor_uses_embedded_montserrat)
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FreezeProcessor p;
+    std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
+    const auto& fonts = FreezeEditor::fonts();
+    CHECK (fonts.light != nullptr && fonts.medium != nullptr && fonts.semibold != nullptr);
+    if (fonts.light != nullptr)
+        CHECK (fonts.light->getName().containsIgnoreCase ("Montserrat"));
 }

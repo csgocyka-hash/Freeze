@@ -1,22 +1,15 @@
 #include "PluginEditor.h"
+#include "BinaryData.h"
 #include "dsp/Presets.h"
 
 namespace
 {
-// Modern geometric sans: Avenir Next on macOS, Segoe UI on Windows, unless typefaces were supplied
+// Montserrat: ExtraLight for the wordmark, Medium for the preset name, SemiBold for labels
 juce::FontOptions uiFont (float height, const juce::String& style)
 {
     const auto& set = FreezeEditor::fonts();
-    if (set.light != nullptr)
-    {
-        auto& face = style == "Ultra Light" ? set.light : (style == "Medium" ? set.medium : set.semibold);
-        return juce::FontOptions (face).withHeight (height);
-    }
-   #if JUCE_MAC
-    return juce::FontOptions ("Avenir Next", style, height);
-   #else
-    return juce::FontOptions ("Segoe UI", style == "Demi Bold" ? "Semibold" : style, height);
-   #endif
+    auto& face = style == "Ultra Light" ? set.light : (style == "Medium" ? set.medium : set.semibold);
+    return juce::FontOptions (face).withHeight (height);
 }
 
 const juce::Colour panelTop (0xfff4f5f7), panelBottom (0xffe2e5ea), ink (0xff3b4250), inkSoft (0xff8a92a0);
@@ -277,7 +270,12 @@ void FreezeEditor::updateLabel (Knob& knob)
 
 FreezeEditor::FontSet& FreezeEditor::fonts()
 {
-    static FontSet set;
+    static FontSet set = [] {
+        auto load = [] (const char* data, int size) { return juce::Typeface::createSystemTypefaceFor (data, (size_t) size); };
+        return FontSet { load (BinaryData::MontserratExtraLight_ttf, BinaryData::MontserratExtraLight_ttfSize),
+                         load (BinaryData::MontserratMedium_ttf, BinaryData::MontserratMedium_ttfSize),
+                         load (BinaryData::MontserratSemiBold_ttf, BinaryData::MontserratSemiBold_ttfSize) };
+    }();
     return set;
 }
 

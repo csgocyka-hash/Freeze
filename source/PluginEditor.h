@@ -24,7 +24,8 @@ public:
 
     void paint (juce::Graphics&) override;
 
-    // Typefaces for the wordmark (light), preset name (medium) and labels (semibold); empty = system font
+    // Typefaces for the wordmark (light), preset name (medium) and labels (semibold): embedded Montserrat,
+    // replaceable for previews
     struct FontSet
     {
         juce::Typeface::Ptr light, medium, semibold;
