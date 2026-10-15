@@ -11,6 +11,11 @@ public:
                            float startAngle, float endAngle, juce::Slider&) override;
     void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour&, bool, bool) override {}
 
+    // Popup menus (the window-size menu) in the panel's light style
+    void setAccent (juce::Colour newAccent, juce::Colour newLight, juce::Colour newDeep);
+    juce::Font getPopupMenuFont() override;
+    void drawPopupMenuBackground (juce::Graphics&, int width, int height) override;
+
     juce::Colour accent { 0xff4f9dff }, accentLight { 0xffa8e0ff }, accentDeep { 0xff2a55e6 };
 };
 
@@ -76,6 +81,24 @@ private:
     std::vector<Line> lines;
 };
 
+// Invisible click area over the FREEZE logo; clicking it opens the window-size menu
+class LogoHotspot : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    LogoHotspot()
+    {
+        setComponentID ("logo");
+        setMouseCursor (juce::MouseCursor::PointingHandCursor);
+        setTooltip ("Window size");
+    }
+    void mouseUp (const juce::MouseEvent& e) override
+    {
+        if (onClick != nullptr && getLocalBounds().contains (e.getPosition()))
+            onClick();
+    }
+    std::function<void()> onClick;
+};
+
 // The plugin's face, at its design size: wordmark and preset selector on top, the big Amount knob in the middle over an ice splash
 // that shatters as the amount rises, and the small Grain and FX knobs underneath. Colours follow the preset.
 class FreezePanel : public juce::Component, private juce::Timer
@@ -88,6 +111,9 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+
+    LogoHotspot logo;
+    FreezeLookAndFeel& getLookAndFeelForMenus() { return lookAndFeel; }
 
 private:
     struct Shard
@@ -140,6 +166,11 @@ public:
     explicit FreezeEditor (FreezeProcessor&);
     void resized() override;
 
+    // Window size as a fraction of the standard size (1 = 100 %, the size it opens at by default)
+    void setUiScale (float scale);
+    float getUiScale() const;
+    void showScaleMenu();
+
     // Typefaces for the wordmark (light), preset name (medium) and labels (semibold): embedded Montserrat,
     // replaceable for previews
     struct FontSet
@@ -149,7 +180,8 @@ public:
     };
     static FontSet& fonts();
 
-    static constexpr float defaultScale = 0.7f, minScale = 0.5f, maxScale = 1.5f;
+    // Panel scale at 100 % (standard), and the range the window can be resized over
+    static constexpr float defaultScale = 0.7f, minScale = 0.35f, maxScale = 1.05f;
 
 private:
     FreezeProcessor& freezeProcessor;

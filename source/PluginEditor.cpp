@@ -257,6 +257,7 @@ FreezePanel::FreezePanel (FreezeProcessor& p)
     presetName.setFont (uiFont (FreezeEditor::fonts().capitals ? 14.0f : 16.0f, "Medium"));
     presetName.setInterceptsMouseClicks (false, false);
     addAndMakeVisible (presetName);
+    addAndMakeVisible (logo);
 
     holdAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (freezeProcessor.apvts, "hold", snowflake);
     addAndMakeVisible (snowflake);
@@ -374,9 +375,7 @@ void FreezePanel::applyPresetColours()
     accent = juce::Colour (preset.accent);
     accentLight = juce::Colour (preset.accentLight);
     accentDeep = juce::Colour (preset.accentDeep);
-    lookAndFeel.accent = accent;
-    lookAndFeel.accentLight = accentLight;
-    lookAndFeel.accentDeep = accentDeep;
+    lookAndFeel.setAccent (accent, accentLight, accentDeep);
     snowflake.accent = accent;
     snowflake.accentLight = accentLight;
     snowflake.repaint();
@@ -636,6 +635,7 @@ void FreezePanel::paint (juce::Graphics& g)
 void FreezePanel::resized()
 {
     const auto centreX = getWidth() / 2;
+    logo.setBounds (12, 4, 200, 34); // over the FREEZE wordmark and "by fouren"
     // The preset selector sits between the wordmark and the snowflake
     presetName.setBounds (juce::Rectangle<int> (100, 24).withCentre ({ (212 + getWidth() - 48) / 2, 20 }));
     previous.setBounds (presetName.getX() - 28, 8, 26, 24);
@@ -656,6 +656,30 @@ void FreezePanel::resized()
                                                                            knob->slider.getBottom() + 2 }));
 }
 
+void FreezeLookAndFeel::setAccent (juce::Colour newAccent, juce::Colour newLight, juce::Colour newDeep)
+{
+    accent = newAccent;
+    accentLight = newLight;
+    accentDeep = newDeep;
+    setColour (juce::PopupMenu::backgroundColourId, juce::Colour (0xfff4f5f7));
+    setColour (juce::PopupMenu::textColourId, juce::Colour (0xff3b4250));
+    setColour (juce::PopupMenu::headerTextColourId, juce::Colour (0xff8a92a0));
+    setColour (juce::PopupMenu::highlightedBackgroundColourId, accent.withAlpha (0.18f));
+    setColour (juce::PopupMenu::highlightedTextColourId, accentDeep);
+}
+
+juce::Font FreezeLookAndFeel::getPopupMenuFont()
+{
+    return juce::Font (uiFont (13.0f, "Medium").withKerningFactor (0.03f)); // numbers read better un-spaced
+}
+
+void FreezeLookAndFeel::drawPopupMenuBackground (juce::Graphics& g, int width, int height)
+{
+    g.fillAll (findColour (juce::PopupMenu::backgroundColourId));
+    g.setColour (juce::Colour (0xffc8ccd3));
+    g.drawRect (0, 0, width, height, 1);
+}
+
 FreezeEditor::FreezeEditor (FreezeProcessor& p)
     : AudioProcessorEditor (p),
       freezeProcessor (p),
@@ -665,6 +689,7 @@ FreezeEditor::FreezeEditor (FreezeProcessor& p)
     const int width = freezeProcessor.apvts.state.getProperty ("uiWidth", (int) (FreezePanel::designWidth * defaultScale));
 
     addAndMakeVisible (panel);
+    panel.logo.onClick = [this] { showScaleMenu(); };
     setResizable (true, false); // resizable from the window edges; no corner grip over the Detune control
     setResizeLimits ((int) (FreezePanel::designWidth * minScale), (int) (FreezePanel::designHeight * minScale),
                      (int) (FreezePanel::designWidth * maxScale), (int) (FreezePanel::designHeight * maxScale));
@@ -682,4 +707,34 @@ void FreezeEditor::resized()
     panel.setTransform (juce::AffineTransform::scale (scale));
     if (sizeIsSet) // only the user's resizes are remembered
         freezeProcessor.apvts.state.setProperty ("uiWidth", getWidth(), nullptr);
+}
+
+void FreezeEditor::setUiScale (float scale)
+{
+    const int width = juce::roundToInt (FreezePanel::designWidth * defaultScale * scale);
+    setSize (width, juce::roundToInt (width * (double) FreezePanel::designHeight / FreezePanel::designWidth));
+}
+
+float FreezeEditor::getUiScale() const
+{
+    return (float) getWidth() / (FreezePanel::designWidth * defaultScale);
+}
+
+void FreezeEditor::showScaleMenu()
+{
+    const float scales[] = { 0.5f, 0.75f, 1.0f, 1.25f, 1.5f };
+    juce::PopupMenu menu;
+    menu.setLookAndFeel (&panel.getLookAndFeelForMenus());
+    menu.addSectionHeader ("WINDOW SIZE");
+    for (int i = 0; i < 5; ++i)
+    {
+        const auto text = juce::String (juce::roundToInt (scales[i] * 100.0f)) + " %" + (scales[i] == 1.0f ? "  (standard)" : "");
+        menu.addItem (i + 1, text, true, std::abs (getUiScale() - scales[i]) < 0.02f);
+    }
+    juce::Component::SafePointer<FreezeEditor> safe (this);
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&panel.logo),
+                        [safe, scales] (int chosen) {
+                            if (safe != nullptr && chosen > 0)
+                                safe->setUiScale (scales[chosen - 1]);
+                        });
 }

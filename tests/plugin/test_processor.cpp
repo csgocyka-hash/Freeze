@@ -334,3 +334,32 @@ TEST (editor_opens_small_and_scales)
     editor->setSize (840, 600);
     CHECK (std::abs (panel.getBoundsInParent().getWidth() - 840) <= 1);
 }
+
+TEST (logo_scale_menu_sizes)
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FreezeProcessor p;
+    std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
+    auto* freezeEditor = dynamic_cast<FreezeEditor*> (editor.get());
+    CHECK (freezeEditor != nullptr);
+    if (freezeEditor == nullptr)
+        return;
+    // The FREEZE logo is clickable and opens the scale menu
+    auto* logo = panelOf (*editor).findChildWithID ("logo");
+    CHECK (logo != nullptr && logo->getWidth() > 50);
+    const float scales[] = { 0.5f, 0.75f, 1.0f, 1.25f, 1.5f };
+    const int widths[] = { 154, 231, 308, 385, 462 };
+    for (int i = 0; i < 5; ++i)
+    {
+        freezeEditor->setUiScale (scales[i]);
+        CHECK (editor->getWidth() == widths[i]);
+        CHECK (std::abs (freezeEditor->getUiScale() - scales[i]) < 0.01f);
+    }
+    // The choice is saved with the project
+    juce::MemoryBlock state;
+    p.getStateInformation (state);
+    FreezeProcessor q;
+    q.setStateInformation (state.getData(), (int) state.getSize());
+    std::unique_ptr<juce::AudioProcessorEditor> reopened (q.createEditor());
+    CHECK (reopened->getWidth() == 462);
+}
