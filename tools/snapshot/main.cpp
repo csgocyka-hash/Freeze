@@ -16,7 +16,7 @@ int main (int argc, char** argv)
     }
 
     juce::ScopedJuceInitialiser_GUI gui;
-    if (argc > 6 && juce::String (argv[4]) != "hold" && juce::String (argv[4]) != "window" && ! juce::String (argv[4]).startsWith ("noise=") && ! juce::String (argv[4]).startsWith ("detune=") && juce::String (argv[4]) != "closeup")
+    if (argc > 6 && juce::String (argv[4]) != "hold" && ! juce::String (argv[4]).startsWith ("splash=") && juce::String (argv[4]) != "detunecorner" && ! juce::String (argv[4]).startsWith ("warp=") && juce::String (argv[4]) != "window" && ! juce::String (argv[4]).startsWith ("noise=") && ! juce::String (argv[4]).startsWith ("detune=") && juce::String (argv[4]) != "closeup")
     {
         auto load = [] (const char* path) {
             juce::MemoryBlock data;
@@ -26,13 +26,13 @@ int main (int argc, char** argv)
         FreezeEditor::fonts() = { load (argv[4]), load (argv[5]), load (argv[6]), argc > 7 && juce::String (argv[7]) == "caps" };
     }
     FreezeProcessor processor;
-    if (argc > 3 && juce::String (argv[3]) != "hold" && juce::String (argv[3]) != "window" && ! juce::String (argv[3]).startsWith ("noise=") && ! juce::String (argv[3]).startsWith ("detune=") && juce::String (argv[3]) != "closeup")
+    if (argc > 3 && juce::String (argv[3]) != "hold" && ! juce::String (argv[3]).startsWith ("splash=") && juce::String (argv[3]) != "detunecorner" && ! juce::String (argv[3]).startsWith ("warp=") && juce::String (argv[3]) != "window" && ! juce::String (argv[3]).startsWith ("noise=") && ! juce::String (argv[3]).startsWith ("detune=") && juce::String (argv[3]) != "closeup")
     {
         processor.setCurrentProgram (std::atoi (argv[3]));
         processor.handleUpdateNowIfNeeded();
     }
     auto* amount = processor.apvts.getParameter ("freeze");
-    amount->setValueNotifyingHost (argc > 2 && juce::String (argv[2]) != "hold" && juce::String (argv[2]) != "window" && ! juce::String (argv[2]).startsWith ("noise=") && ! juce::String (argv[2]).startsWith ("detune=") ? (float) std::atof (argv[2]) : 0.6f);
+    amount->setValueNotifyingHost (argc > 2 && juce::String (argv[2]) != "hold" && ! juce::String (argv[2]).startsWith ("splash=") && juce::String (argv[2]) != "detunecorner" && ! juce::String (argv[2]).startsWith ("warp=") && juce::String (argv[2]) != "window" && ! juce::String (argv[2]).startsWith ("noise=") && ! juce::String (argv[2]).startsWith ("detune=") ? (float) std::atof (argv[2]) : 0.6f);
 
     for (int i = 2; i < argc; ++i)
         if (juce::String (argv[i]) == "hold")
@@ -47,14 +47,25 @@ int main (int argc, char** argv)
     bool closeup = false;
     for (int i = 2; i < argc; ++i)
         closeup = closeup || juce::String (argv[i]) == "closeup";
+
+    for (int i = 2; i < argc; ++i)
+        if (juce::String (argv[i]).startsWith ("splash="))
+            if (auto* p = dynamic_cast<FreezePanel*> (editor->getChildComponent (0)))
+                p->splashStyle = juce::String (argv[i]).getTrailingIntValue();
+
     // Render the panel at its design size (the window itself opens scaled down), or with "window" the
     // window exactly as it opens (at 2x for a Retina screen)
     bool window = false;
     for (int i = 2; i < argc; ++i)
         window = window || juce::String (argv[i]) == "window";
     auto& panel = *editor->getChildComponent (0);
-    const auto area = closeup ? juce::Rectangle<int> (0, panel.getHeight() - 60, panel.getWidth(), 60) : panel.getLocalBounds();
-    const auto image = window ? editor->createComponentSnapshot (editor->getLocalBounds(), true, 2.0f)
+    bool detuneOnly = false;
+    for (int i = 2; i < argc; ++i)
+        detuneOnly = detuneOnly || juce::String (argv[i]) == "detunecorner";
+    auto area = closeup ? juce::Rectangle<int> (0, panel.getHeight() - 60, panel.getWidth(), 60) : panel.getLocalBounds();
+    if (detuneOnly)
+        area = juce::Rectangle<int> (panel.getWidth() - 60, panel.getHeight() - 60, 60, 60);
+    const auto image = detuneOnly ? panel.createComponentSnapshot (area, true, 6.0f) : window ? editor->createComponentSnapshot (editor->getLocalBounds(), true, 2.0f)
                               : panel.createComponentSnapshot (area, true, closeup ? 3.0f : 2.0f);
 
     const juce::File file = juce::File::getCurrentWorkingDirectory().getChildFile (argv[1]);
