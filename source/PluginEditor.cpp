@@ -529,7 +529,7 @@ DetuneControl::DetuneControl() : FillControl ("Detune")
         const float t = (float) i / (float) (count - 1) * 2.0f - 1.0f; // -1 (top) .. 1 (bottom)
         const float halfLength = 0.40f * std::sqrt (1.0f - 0.82f * t * t);
         const float y = 0.5f + t * 0.33f;
-        lines.push_back ({ y, 0.018f, 0.5f + nudge[i] - halfLength, 0.5f + nudge[i] + halfLength });
+        lines.push_back ({ y, 0.008f, 0.5f + nudge[i] - halfLength, 0.5f + nudge[i] + halfLength }); // hairlines
     }
     iconTop = lines.front().y - lines.front().thickness * 0.5f;
     iconBottom = lines.back().y + lines.back().thickness * 0.5f;
