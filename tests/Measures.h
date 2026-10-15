@@ -78,3 +78,57 @@ inline double maxStep (const std::vector<float>& x, size_t from)
     return m;
 }
 
+
+// Direction of the sound: skewness of the 2 ms envelope's changes after the first second. Plucks rise
+// sharply and decay slowly (large positive skew); a directionless wash has skew near 0.
+inline double onsetSkew (const std::vector<float>& x)
+{
+    std::vector<double> env, d;
+    for (size_t pos = 48000; pos + 96 <= x.size(); pos += 96)
+        env.push_back (rms (x.data() + pos, 96));
+    for (size_t i = 1; i < env.size(); ++i)
+        d.push_back (env[i] - env[i - 1]);
+    double mean = 0.0, m2 = 0.0, m3 = 0.0;
+    for (double v : d) mean += v / (double) d.size();
+    for (double v : d)
+    {
+        m2 += (v - mean) * (v - mean) / (double) d.size();
+        m3 += (v - mean) * (v - mean) * (v - mean) / (double) d.size();
+    }
+    return m3 / std::pow (m2, 1.5);
+}
+
+// Envelope fluctuation: standard deviation / mean of 10 ms RMS windows from `fromSample` on
+inline double envelopeVariation (const std::vector<float>& x, size_t fromSample)
+{
+    std::vector<double> env;
+    for (size_t pos = fromSample; pos + 480 <= x.size(); pos += 480)
+        env.push_back (rms (x.data() + pos, 480));
+    double mean = 0.0, var = 0.0;
+    for (double v : env) mean += v / (double) env.size();
+    for (double v : env) var += (v - mean) * (v - mean) / (double) env.size();
+    return std::sqrt (var) / mean;
+}
+
+// Level of x at frequency f (Goertzel), normalised by length
+inline double toneLevel (const std::vector<float>& x, size_t from, size_t to, double f, double sr)
+{
+    const double w = kTwoPi * f / sr, coeff = 2.0 * std::cos (w);
+    double s1 = 0.0, s2 = 0.0;
+    for (size_t i = from; i < to; ++i)
+    {
+        const double s0 = x[i] + coeff * s1 - s2;
+        s2 = s1;
+        s1 = s0;
+    }
+    return std::sqrt (s1 * s1 + s2 * s2 - coeff * s1 * s2) / (double) (to - from);
+}
+
+// Strongest tone level within +-10 Hz of f (the rebuilt tone can sit a little off the exact frequency)
+inline double bandLevel (const std::vector<float>& x, size_t from, size_t to, double f, double sr)
+{
+    double best = 0.0;
+    for (double g = f - 10.0; g <= f + 10.0; g += 0.5)
+        best = std::max (best, toneLevel (x, from, to, g, sr));
+    return best;
+}

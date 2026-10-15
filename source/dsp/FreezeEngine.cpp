@@ -48,6 +48,8 @@ void FreezeEngine::reset()
             g = Grain {};
         // Each channel draws its own grain positions, so left and right decorrelate.
         c.random.seed (seed * 0x9e3779b97f4a7c15ull + ch + 1);
+        c.spectral.prepare (sampleRate, seed * 0x2545f4914f6cdd1dull + ch + 1);
+        c.spectral.setHold (hold);
         c.nextSpawn = 0;
         c.reverseAccumulator = 0.5f;
     }
@@ -62,6 +64,10 @@ void FreezeEngine::setSeed (uint64_t newSeed)
 void FreezeEngine::setGrainSeconds (double seconds)
 {
     grainSeconds = std::clamp (seconds, 0.040, 0.500);
+    // The Grain knob also sets how fast the spectral freeze follows new notes: 0.3 s to 4 s
+    const double t = std::log (grainSeconds / 0.040) / std::log (0.500 / 0.040);
+    for (auto& c : channelState)
+        c.spectral.setSmoothingSeconds (0.3 * std::pow (4.0 / 0.3, t));
 }
 
 void FreezeEngine::setDensity (double grainsOverlapping)
@@ -82,6 +88,13 @@ double FreezeEngine::reversedShare() const
 void FreezeEngine::setHold (bool shouldHold)
 {
     hold = shouldHold;
+    for (auto& c : channelState)
+        c.spectral.setHold (shouldHold);
+}
+
+void FreezeEngine::setMaxSpectralShare (float share)
+{
+    maxSpectralShare = std::clamp (share, 0.0f, 1.0f);
 }
 
 void FreezeEngine::setFxCharacter (const FxCharacter& character)
@@ -247,8 +260,14 @@ void FreezeEngine::process (float* const* channels, int numChannels, int numSamp
 
     for (int i = 0; i < numSamples; ++i)
     {
+        // The spectral freeze always listens, so it is ready the moment Amount goes up
+        float spectralOut[2] {};
         for (int ch = 0; ch < numChannels; ++ch)
-            channelState[(size_t) ch].staging[(size_t) stagingFill] = channels[ch][i];
+        {
+            auto& c = channelState[(size_t) ch];
+            c.staging[(size_t) stagingFill] = channels[ch][i];
+            spectralOut[std::min (ch, 1)] = c.spectral.processSample (channels[ch][i]);
+        }
 
         if (++stagingFill == segmentLength)
         {
@@ -263,6 +282,12 @@ void FreezeEngine::process (float* const* channels, int numChannels, int numSamp
             const auto dryGain = (float) std::cos (k);
             const auto wetGain = (float) std::sin (k);
 
+            // From 50 % to 100 % Amount the frozen sound crossfades from grains into the spectral freeze
+            const float t = std::clamp ((freezeAmount[i] - 0.5f) * 2.0f, 0.0f, 1.0f);
+            const float spectralShare = maxSpectralShare * t * t * (3.0f - 2.0f * t);
+            const auto grainGain = (float) std::cos (spectralShare * kHalfPi);
+            const auto spectralGain = (float) std::sin (spectralShare * kHalfPi);
+
             for (int ch = 0; ch < numChannels; ++ch)
             {
                 auto& c = channelState[(size_t) ch];
@@ -272,6 +297,8 @@ void FreezeEngine::process (float* const* channels, int numChannels, int numSamp
                     c.nextSpawn += nextSpawnInterval (c);
                 }
                 float wet = renderGrains (c);
+                if (spectralShare > 0.0f)
+                    wet = wet * grainGain + spectralOut[std::min (ch, 1)] * spectralGain;
                 if (fxAmount != nullptr)
                 {
                     const float f = fxAmount[i];

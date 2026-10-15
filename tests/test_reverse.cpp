@@ -10,29 +10,12 @@ std::vector<float> freezeWithReverse (float amount, float maxReverseShare, gf::F
     auto& e = engineOut != nullptr ? *engineOut : local;
     e.prepare (48000, 512, 1);
     e.setMaxReverseShare (maxReverseShare);
+    e.setMaxSpectralShare (0.0f); // measure the grain cloud itself
     auto p = pluckTrain (48000, 8.0);
     std::vector<float> a (p.size(), amount);
     return runEngine (e, { p }, a, 512)[0];
 }
 
-// Direction of the sound: skewness of the 2 ms envelope's changes after the first second. Plucks rise
-// sharply and decay slowly (large positive skew); a directionless wash has skew near 0.
-double onsetSkew (const std::vector<float>& x)
-{
-    std::vector<double> env, d;
-    for (size_t pos = 48000; pos + 96 <= x.size(); pos += 96)
-        env.push_back (rms (x.data() + pos, 96));
-    for (size_t i = 1; i < env.size(); ++i)
-        d.push_back (env[i] - env[i - 1]);
-    double mean = 0.0, m2 = 0.0, m3 = 0.0;
-    for (double v : d) mean += v / (double) d.size();
-    for (double v : d)
-    {
-        m2 += (v - mean) * (v - mean) / (double) d.size();
-        m3 += (v - mean) * (v - mean) * (v - mean) / (double) d.size();
-    }
-    return m3 / std::pow (m2, 1.5);
-}
 } // namespace
 
 TEST (half_the_grains_reverse_at_full_amount)

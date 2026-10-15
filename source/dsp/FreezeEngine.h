@@ -3,6 +3,7 @@
 // JUCE-free and real-time safe: everything is allocated in prepare().
 #include "Fx.h"
 #include "Random.h"
+#include "SpectralFreeze.h"
 #include <cmath>
 #include <cstdint>
 #include <vector>
@@ -38,6 +39,10 @@ public:
     // Share of grains played backwards at full Amount (scaled by Amount below that). Default 0.5.
     void setMaxReverseShare (float share);
 
+    // Share of the frozen sound that comes from the spectral freeze at full Amount. Below 50 % Amount it
+    // is all grains; from 50 % to 100 % it crossfades into the spectral freeze. Default 1.
+    void setMaxSpectralShare (float share);
+
     // Fraction of grains spawned since reset() that play backwards (diagnostic).
     double reversedShare() const;
 
@@ -71,6 +76,7 @@ private:
         Grain grains[kMaxGrains];
         Random random;
         float reverseAccumulator = 0.0f; // spreads reversed grains evenly between forward ones
+        SpectralFreeze spectral;
         int64_t nextSpawn = 0;
     };
 
@@ -88,6 +94,7 @@ private:
     bool bypassed = false;
     bool hold = false;
     float maxReverseShare = 0.5f;
+    float maxSpectralShare = 1.0f;
     int64_t grainsSpawned = 0, grainsReversed = 0;
     FxChain fx;
     int stagingFill = 0;

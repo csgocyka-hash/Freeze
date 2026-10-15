@@ -4,20 +4,6 @@
 
 namespace
 {
-// Energy of x at frequency f (Goertzel), normalised by length
-double toneLevel (const std::vector<float>& x, size_t from, size_t to, double f, double sr)
-{
-    const double w = kTwoPi * f / sr, coeff = 2.0 * std::cos (w);
-    double s1 = 0.0, s2 = 0.0;
-    for (size_t i = from; i < to; ++i)
-    {
-        const double s0 = x[i] + coeff * s1 - s2;
-        s2 = s1;
-        s1 = s0;
-    }
-    return std::sqrt (s1 * s1 + s2 * s2 - coeff * s1 * s2) / (double) (to - from);
-}
-
 // Plucks for 2 s, then hold switches to `holdOn` and a loud 880 Hz tone plays for 3 s.
 std::vector<float> runHoldScenario (bool holdOn)
 {
