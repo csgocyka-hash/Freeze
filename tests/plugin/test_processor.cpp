@@ -227,3 +227,36 @@ TEST (labels_are_spaced_capitals_in_montserrat_light)
             foundGrain = foundGrain || label->getText() == "GRAIN";
     CHECK (foundGrain);
 }
+
+TEST (hold_parameter)
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FreezeProcessor a;
+    auto* hold = dynamic_cast<juce::AudioParameterBool*> (a.apvts.getParameter ("hold"));
+    CHECK (hold != nullptr);
+    if (hold == nullptr)
+        return;
+    CHECK (! hold->get());
+    hold->setValueNotifyingHost (1.0f);
+    juce::MemoryBlock state;
+    a.getStateInformation (state);
+    FreezeProcessor b;
+    b.setStateInformation (state.getData(), (int) state.getSize());
+    CHECK (b.apvts.getRawParameterValue ("hold")->load() > 0.5f);
+}
+
+TEST (snowflake_button_toggles_hold)
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FreezeProcessor p;
+    std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
+    juce::Button* snowflake = nullptr;
+    for (auto* child : editor->getChildren())
+        if (auto* b = dynamic_cast<juce::Button*> (child); b != nullptr && b->getName() == "Hold")
+            snowflake = b;
+    CHECK (snowflake != nullptr);
+    if (snowflake == nullptr)
+        return;
+    snowflake->setToggleState (true, juce::sendNotificationSync); // same path as a user click
+    CHECK (p.apvts.getRawParameterValue ("hold")->load() > 0.5f);
+}

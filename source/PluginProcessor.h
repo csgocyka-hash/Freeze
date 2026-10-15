@@ -53,6 +53,7 @@ private:
     std::atomic<float>* grainParam = nullptr;
     std::atomic<float>* fxParam = nullptr;
     std::atomic<float>* presetParam = nullptr;
+    std::atomic<float>* holdParam = nullptr;
     int appliedPreset = -1;               // audio thread: preset whose density/FX the engine uses
     std::atomic<int> pendingPreset { -1 }; // preset whose starting values still need applying
     bool restoringState = false;

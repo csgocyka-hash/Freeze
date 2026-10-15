@@ -1,7 +1,7 @@
 // Offline renderer: hear Freeze without a DAW.
 //
 //   render [--test-pluck | --in file.wav] [--preset Name | --all] [--freeze 0..1 | --sweep]
-//          [--grain 0..1] [--fx 0..1] [--out file.wav]
+//          [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--out file.wav]
 //
 // Writes "00 Dry.wav" next to the output for comparison. --all writes one file per preset.
 #include "dsp/FreezeEngine.h"
@@ -79,6 +79,7 @@ struct Settings
     float freeze = 1.0f;
     bool sweep = false;
     float grain = -1.0f, fx = -1.0f; // -1: use the preset's starting value
+    double holdAt = -1.0;           // seconds; switch Hold on from this point (-1: never)
 };
 
 juce::AudioBuffer<float> render (const juce::AudioBuffer<float>& dry, double sampleRate, const Settings& s)
@@ -100,6 +101,7 @@ juce::AudioBuffer<float> render (const juce::AudioBuffer<float>& dry, double sam
         const int n = std::min (512, length - pos);
         for (int i = 0; i < n; ++i)
             amount[(size_t) i] = s.sweep ? (float) (pos + i) / (float) length : s.freeze;
+        engine.setHold (s.holdAt >= 0.0 && pos >= (int) (s.holdAt * sampleRate));
         float* channels[2] = { out.getWritePointer (0, pos), out.getWritePointer (1, pos) };
         engine.process (channels, 2, n, amount.data(), fxAmount.data());
     }
@@ -138,6 +140,7 @@ int main (int argc, char** argv)
         else if (arg == "--grain" && hasValue) settings.grain = (float) std::atof (argv[++i]);
         else if (arg == "--fx" && hasValue) settings.fx = (float) std::atof (argv[++i]);
         else if (arg == "--sweep") settings.sweep = true;
+        else if (arg == "--hold-at" && hasValue) settings.holdAt = std::atof (argv[++i]);
         else if (arg == "--all") all = true;
         else if (arg == "--test-pluck") inPath = {};
         else if (arg == "--preset" && hasValue)
@@ -152,7 +155,7 @@ int main (int argc, char** argv)
         else
         {
             std::fprintf (stderr, "Usage: render [--test-pluck | --in file.wav] [--preset Name | --all] "
-                                  "[--freeze 0..1 | --sweep] [--grain 0..1] [--fx 0..1] [--out file.wav]\n");
+                                  "[--freeze 0..1 | --sweep] [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--out file.wav]\n");
             return 1;
         }
     }

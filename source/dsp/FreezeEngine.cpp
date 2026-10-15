@@ -67,6 +67,11 @@ void FreezeEngine::setDensity (double grainsOverlapping)
     density = std::clamp (grainsOverlapping, 2.0, 16.0);
 }
 
+void FreezeEngine::setHold (bool shouldHold)
+{
+    hold = shouldHold;
+}
+
 void FreezeEngine::setFxCharacter (const FxCharacter& character)
 {
     fx.setCharacter (character);
@@ -85,7 +90,8 @@ void FreezeEngine::commitSegment (Channel& c)
     const auto segmentRms = (float) std::sqrt (sum / segmentLength);
 
     // Silence hold: quiet segments are dropped, so the buffer keeps the last sounding material.
-    if (segmentRms < kSilenceRms)
+    // While Hold is on nothing new is recorded, so the grains keep playing what was captured.
+    if (hold || segmentRms < kSilenceRms)
         return;
 
     const auto slot = (size_t) (c.committedSegments % bufferSegments);

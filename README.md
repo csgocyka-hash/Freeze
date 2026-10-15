@@ -7,6 +7,7 @@ A granular VST3 effect that turns a rhythm, such as a pluck pattern, into one su
 | **Amount** (big knob) | Blends from your dry signal (0 %) to the full freeze (100 %). At 0 % the audio passes through untouched. |
 | **Grain** | Grain length, from 40 ms (shimmery, textured) to 500 ms (smooth, slow). |
 | **FX** | Reverb and delay on the frozen sound only. |
+| **Hold** (snowflake, top right) | Freezes the sound playing right now: nothing new is recorded, so the grains keep playing that moment for as long as Hold is on, while new notes pass through dry. Click again to release. |
 | **Preset** (‹ › at the top) | Ice, Glass, Haze, Ember, Abyss. Each preset has its own colours, grain density and kind of reverb/delay, and sets Grain and FX to a starting point. |
 
 The freeze keeps holding after you stop playing, as long as Amount is up.
@@ -28,6 +29,9 @@ build/render_artefacts/Release/render --test-pluck --all
 
 # one preset with Amount sweeping 0 -> 100 %
 build/render_artefacts/Release/render --test-pluck --preset Haze --sweep --out "renders/Haze sweep.wav"
+
+# switch Hold on 2.6 s in: the chord playing at that moment keeps sounding while the input moves on
+build/render_artefacts/Release/render --test-pluck --preset Ice --hold-at 2.6 --out "renders/Ice hold.wav"
 
 # your own audio, with your own knob settings (0..1)
 build/render_artefacts/Release/render --in my_plucks.wav --preset Glass --grain 0.3 --fx 0.5 --out renders/mine.wav

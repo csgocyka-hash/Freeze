@@ -12,6 +12,7 @@ FreezeProcessor::FreezeProcessor()
     grainParam = apvts.getRawParameterValue ("grain");
     fxParam = apvts.getRawParameterValue ("fx");
     presetParam = apvts.getRawParameterValue ("preset");
+    holdParam = apvts.getRawParameterValue ("hold");
     apvts.addParameterListener ("preset", this);
 }
 
@@ -95,6 +96,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout FreezeProcessor::createLayou
         juce::ParameterID { "fx", 1 }, "FX", juce::NormalisableRange<float> (0.0f, 1.0f), first.fx,
         juce::AudioParameterFloatAttributes().withStringFromValueFunction (percent)));
     layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "preset", 1 }, "Preset", presetNames, 0));
+    layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "hold", 1 }, "Hold", false));
     return layout;
 }
 
@@ -128,6 +130,7 @@ void FreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     freezeSmoothed.setTargetValue (freezeParam->load());
     fxSmoothed.setTargetValue (fxParam->load());
     engine.setGrainSeconds (gf::grainKnobToSeconds (grainParam->load()));
+    engine.setHold (holdParam->load() > 0.5f);
     if (const int index = currentPreset(); index != appliedPreset)
     {
         engine.setDensity (gf::preset (index).density);

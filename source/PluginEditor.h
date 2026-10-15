@@ -14,6 +14,21 @@ public:
     juce::Colour accent { 0xff4f9dff }, accentLight { 0xffa8e0ff }, accentDeep { 0xff2a55e6 };
 };
 
+// The snowflake in the top right: toggles Hold. Grey when off, lit in the preset colour with a glow when on.
+class SnowflakeButton : public juce::Button
+{
+public:
+    SnowflakeButton() : juce::Button ("Hold")
+    {
+        setClickingTogglesState (true);
+        setTooltip ("Hold: keep playing the sound frozen right now");
+    }
+
+    void paintButton (juce::Graphics&, bool isHighlighted, bool isDown) override;
+
+    juce::Colour accent { 0xff4f9dff }, accentLight { 0xffa8e0ff };
+};
+
 // Wide panel: wordmark and preset selector on top, the big Amount knob in the middle over an ice splash
 // that shatters as the amount rises, and the small Grain and FX knobs underneath. Colours follow the preset.
 class FreezeEditor : public juce::AudioProcessorEditor, private juce::Timer
@@ -57,13 +72,14 @@ private:
     void applyPresetColours();
     void drawSplash (juce::Graphics&, juce::Point<float> centre, float amount) const;
     juce::Path splashShape (juce::Point<float> centre, float radius, float rough, int seedOffset, float wobbleScale) const;
-    void drawSnowflake (juce::Graphics&, juce::Point<float> centre, float radius, float amount) const;
 
     FreezeProcessor& freezeProcessor;
     FreezeLookAndFeel lookAndFeel;
     Knob amount, grain, fx;
     juce::TextButton previous { juce::CharPointer_UTF8 ("\xe2\x80\xb9") }, next { juce::CharPointer_UTF8 ("\xe2\x80\xba") };
     juce::Label presetName;
+    SnowflakeButton snowflake;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> holdAttachment;
     std::vector<Shard> shards;
     std::vector<float> edgeNoise; // -1..1 per edge point of the splash
     int shownPreset = -1;

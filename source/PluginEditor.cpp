@@ -240,6 +240,9 @@ FreezeEditor::FreezeEditor (FreezeProcessor& p)
     presetName.setInterceptsMouseClicks (false, false);
     addAndMakeVisible (presetName);
 
+    holdAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (freezeProcessor.apvts, "hold", snowflake);
+    addAndMakeVisible (snowflake);
+
     // Shards scattered around the hexagon edge; fixed seed so the splash always looks the same.
     juce::Random rng (2026);
     // Edge roughness: random values smoothed over neighbours, so the edge is chunky rather than hairy
@@ -348,6 +351,9 @@ void FreezeEditor::applyPresetColours()
     lookAndFeel.accent = accent;
     lookAndFeel.accentLight = accentLight;
     lookAndFeel.accentDeep = accentDeep;
+    snowflake.accent = accent;
+    snowflake.accentLight = accentLight;
+    snowflake.repaint();
 
     presetName.setText (labelText (preset.name), juce::dontSendNotification);
     presetName.setColour (juce::Label::textColourId, ink);
@@ -410,9 +416,24 @@ void FreezeEditor::drawSplash (juce::Graphics& g, juce::Point<float> c, float le
     }
 }
 
-void FreezeEditor::drawSnowflake (juce::Graphics& g, juce::Point<float> c, float r, float level) const
+void SnowflakeButton::paintButton (juce::Graphics& g, bool isHighlighted, bool isDown)
 {
-    g.setColour (inkSoft.interpolatedWith (accent, level).withAlpha (0.45f + 0.55f * level));
+    const auto c = getLocalBounds().toFloat().getCentre();
+    const float r = juce::jmin (getWidth(), getHeight()) * 0.5f - 4.0f;
+    const bool on = getToggleState();
+
+    if (on)
+    {
+        // Soft glow behind the lit snowflake
+        g.setGradientFill (juce::ColourGradient (accentLight.withAlpha (0.7f), c.x, c.y,
+                                                 accentLight.withAlpha (0.0f), c.x + r * 1.5f, c.y, true));
+        g.fillEllipse (juce::Rectangle<float> (r * 3.0f, r * 3.0f).withCentre (c));
+    }
+
+    auto colour = on ? accent : inkSoft;
+    if (isHighlighted || isDown)
+        colour = colour.interpolatedWith (on ? accent.darker (0.3f) : ink, 0.5f);
+    g.setColour (colour);
     for (int i = 0; i < 6; ++i)
     {
         const float a = juce::MathConstants<float>::pi / 3.0f * (float) i;
@@ -453,7 +474,6 @@ void FreezeEditor::paint (juce::Graphics& g)
     g.setColour (ink);
     word.draw (g);
 
-    drawSnowflake (g, { bounds.getRight() - 28.0f, 20.0f }, 10.0f, level);
 
     g.drawImage (noise, bounds);
 }
@@ -464,6 +484,7 @@ void FreezeEditor::resized()
     presetName.setBounds (juce::Rectangle<int> (140, 24).withCentre ({ centreX, 20 }));
     previous.setBounds (presetName.getX() - 28, 8, 26, 24);
     next.setBounds (presetName.getRight() + 2, 8, 26, 24);
+    snowflake.setBounds (getWidth() - 48, 0, 40, 40);
 
     // Big Amount knob in the middle, Grain and FX side by side underneath it
     // Width sets the knob size; the extra height is room for the shadow

@@ -35,6 +35,9 @@ public:
     void setDensity (double grainsOverlapping);
     void setFxCharacter (const FxCharacter& character);
 
+    // Hold: stop recording new input, so the grains keep playing the sound captured so far.
+    void setHold (bool shouldHold);
+
     // In place. freezeAmount and fxAmount hold smoothed knob values (0..1) per sample; fxAmount may be null.
     void process (float* const* channels, int numChannels, int numSamples, const float* freezeAmount,
                   const float* fxAmount = nullptr);
@@ -75,6 +78,7 @@ private:
     double grainSeconds = kGrainSeconds;
     double density = kDensity;
     bool bypassed = false;
+    bool hold = false;
     FxChain fx;
     int stagingFill = 0;
     int64_t sampleCounter = 0;
