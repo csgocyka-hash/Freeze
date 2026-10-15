@@ -216,19 +216,15 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
     }
     if (flat)
     {
-        // Big knob: a light grey line of even width that narrows a little over its last stretch,
-        // to a slightly blunt tip
+        // Big knob: a straight light grey line of even width
         const auto direction = juce::Point<float> (std::sin (angle), -std::cos (angle));
-        const auto side = juce::Point<float> (std::cos (angle), std::sin (angle)) * juce::jmax (0.9f, knobRadius * 0.022f);
+        const auto side = juce::Point<float> (std::cos (angle), std::sin (angle)) * juce::jmax (0.9f, knobRadius * 0.02f);
         const auto base = c + direction * (knobRadius * 0.16f);
-        const auto taperStart = c + direction * (knobRadius * 0.72f);
         const auto tip = c + direction * (knobRadius * 0.86f);
         juce::Path needle;
         needle.startNewSubPath (base + side);
-        needle.lineTo (taperStart + side);
-        needle.lineTo (tip + side * 0.35f);
-        needle.lineTo (tip - side * 0.35f);
-        needle.lineTo (taperStart - side);
+        needle.lineTo (tip + side);
+        needle.lineTo (tip - side);
         needle.lineTo (base - side);
         needle.closeSubPath();
         g.setColour (juce::Colours::white.withAlpha (0.8f));
@@ -273,6 +269,10 @@ FreezeEditor::FreezeEditor (FreezeProcessor& p)
     noiseAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (freezeProcessor.apvts, "noise", noiseControl);
     noiseControl.onValueChange = [this] { noiseControl.repaint(); }; // the dot fill shows the level
     addAndMakeVisible (noiseControl);
+
+    detuneAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (freezeProcessor.apvts, "detune", detuneControl);
+    detuneControl.onValueChange = [this] { detuneControl.repaint(); };
+    addAndMakeVisible (detuneControl);
 
     // Shards scattered around the hexagon edge; fixed seed so the splash always looks the same.
     juce::Random rng (2026);
@@ -388,6 +388,9 @@ void FreezeEditor::applyPresetColours()
     noiseControl.accent = accent;
     noiseControl.accentLight = accentLight;
     noiseControl.repaint();
+    detuneControl.accent = accent;
+    detuneControl.accentLight = accentLight;
+    detuneControl.repaint();
 
     presetName.setText (labelText (preset.name), juce::dontSendNotification);
     presetName.setColour (juce::Label::textColourId, ink);
@@ -450,26 +453,14 @@ void FreezeEditor::drawSplash (juce::Graphics& g, juce::Point<float> c, float le
     }
 }
 
-NoiseControl::NoiseControl() : juce::Slider ("Noise")
+FillControl::FillControl (const juce::String& name) : juce::Slider (name)
 {
-    setSliderStyle (juce::Slider::RotaryVerticalDrag); // drag up/down; the dots show the value
+    setSliderStyle (juce::Slider::RotaryVerticalDrag); // drag up/down; the fill shows the value
     setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
     setDoubleClickReturnValue (true, 0.0);
-    setTooltip ("Noise: drag up or down for clean, airy noise that sweeps with the big knob");
-
-    // Halftone fade: a round dot grid whose dots shrink towards the edge, like dithered noise
-    for (int row = -6; row <= 6; ++row)
-        for (int col = -6; col <= 6; ++col)
-        {
-            const float x = 0.075f * (float) col, y = 0.075f * (float) row;
-            const float r = std::sqrt (x * x + y * y) / 0.47f;
-            if (r > 1.0f)
-                continue;
-            dots.push_back ({ 0.5f + x, 0.5f + y, 0.029f * (1.0f - 0.7f * r) });
-        }
 }
 
-void NoiseControl::paint (juce::Graphics& g)
+void FillControl::paint (juce::Graphics& g)
 {
     const auto area = getLocalBounds().toFloat().reduced (1.0f);
     const auto level = (float) getValue();
@@ -483,18 +474,74 @@ void NoiseControl::paint (juce::Graphics& g)
         g.fillEllipse (glow);
     }
 
-    // Fill line: from the bottom of the dot pattern (0 %) to its top (100 %)
-    const float fillFrom = 0.5f + 0.47f - level * 0.94f;
     const bool hot = isMouseOverOrDragging();
+    const auto grey = hot ? inkSoft.interpolatedWith (ink, 0.35f) : inkSoft;
+    const auto lit = hot ? accent.interpolatedWith (accent.darker (0.3f), 0.35f) : accent;
+    drawIcon (g, area, grey);
+
+    if (level > 0.0f)
+    {
+        // Colour from the bottom of the icon up to the level
+        const float fillY = area.getY() + area.getHeight() * (iconBottom - level * (iconBottom - iconTop));
+        juce::Graphics::ScopedSaveState state (g);
+        g.reduceClipRegion (area.withTop (fillY).getSmallestIntegerContainer());
+        drawIcon (g, area, lit);
+    }
+}
+
+NoiseControl::NoiseControl() : FillControl ("Noise")
+{
+    setTooltip ("Noise: drag up or down for clean, airy noise that sweeps with the big knob");
+    iconTop = 0.03f;
+    iconBottom = 0.97f;
+
+    // Halftone fade: a round dot grid whose dots shrink towards the edge, like dithered noise
+    for (int row = -6; row <= 6; ++row)
+        for (int col = -6; col <= 6; ++col)
+        {
+            const float x = 0.075f * (float) col, y = 0.075f * (float) row;
+            const float r = std::sqrt (x * x + y * y) / 0.47f;
+            if (r > 1.0f)
+                continue;
+            dots.push_back ({ 0.5f + x, 0.5f + y, 0.029f * (1.0f - 0.7f * r) });
+        }
+}
+
+void NoiseControl::drawIcon (juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour)
+{
+    g.setColour (colour);
     for (const auto& d : dots)
     {
-        const bool lit = level > 0.0f && d.y >= fillFrom;
-        auto colour = lit ? accent : inkSoft;
-        if (hot)
-            colour = colour.interpolatedWith (lit ? accent.darker (0.3f) : ink, 0.35f);
         const float r = d.radius * area.getWidth();
-        g.setColour (colour);
         g.fillEllipse (area.getX() + d.x * area.getWidth() - r, area.getY() + d.y * area.getHeight() - r, 2.0f * r, 2.0f * r);
+    }
+}
+
+DetuneControl::DetuneControl() : FillControl ("Detune")
+{
+    setTooltip ("Detune: drag up or down to pitch each grain randomly, up to 50 cents up or down");
+    // Stacked horizontal lines, symmetric in length around the middle, each a different weight and nudged
+    // a little left or right - like slightly out-of-tune copies of one line
+    const float thickness[] = { 0.035f, 0.06f, 0.045f, 0.075f, 0.045f, 0.06f, 0.035f };
+    const float halfLength[] = { 0.18f, 0.27f, 0.34f, 0.40f, 0.34f, 0.27f, 0.18f };
+    const float nudge[] = { 0.05f, -0.06f, 0.04f, 0.0f, -0.04f, 0.06f, -0.05f };
+    for (int i = 0; i < 7; ++i)
+    {
+        const float y = 0.14f + 0.12f * (float) i;
+        lines.push_back ({ y, thickness[i], 0.5f + nudge[i] - halfLength[i], 0.5f + nudge[i] + halfLength[i] });
+    }
+    iconTop = lines.front().y - lines.front().thickness * 0.5f;
+    iconBottom = lines.back().y + lines.back().thickness * 0.5f;
+}
+
+void DetuneControl::drawIcon (juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour)
+{
+    g.setColour (colour);
+    for (const auto& l : lines)
+    {
+        const float h = l.thickness * area.getHeight();
+        g.fillRoundedRectangle (area.getX() + l.left * area.getWidth(), area.getY() + l.y * area.getHeight() - h * 0.5f,
+                                (l.right - l.left) * area.getWidth(), h, h * 0.5f);
     }
 }
 
@@ -568,6 +615,7 @@ void FreezeEditor::resized()
     next.setBounds (presetName.getRight() + 2, 8, 26, 24);
     snowflake.setBounds (getWidth() - 48, 0, 40, 40);
     noiseControl.setBounds (8, getHeight() - 54, 46, 46); // bottom-left corner, opposite the snowflake
+    detuneControl.setBounds (getWidth() - 54, getHeight() - 54, 46, 46); // bottom-right corner
 
     // Big Amount knob in the middle, Grain and FX side by side underneath it
     // Width sets the knob size; the extra height is room for the shadow

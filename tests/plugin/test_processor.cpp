@@ -189,13 +189,13 @@ TEST (editor_has_three_knobs)
     int sliders = 0;
     for (auto* child : editor->getChildren())
         sliders += dynamic_cast<juce::Slider*> (child) != nullptr ? 1 : 0;
-    CHECK (sliders == 4); // Amount, Grain, FX and the Noise drag control
+    CHECK (sliders == 5); // Amount, Grain, FX and the Noise and Detune drag controls
 
     // Big Amount knob in the middle, the two small knobs below it
     juce::Slider* knobs[3] {};
     int n = 0;
     for (auto* child : editor->getChildren())
-        if (auto* s = dynamic_cast<juce::Slider*> (child); s != nullptr && s->getName() != "Noise" && n < 3)
+        if (auto* s = dynamic_cast<juce::Slider*> (child); s != nullptr && s->getName() != "Noise" && s->getName() != "Detune" && n < 3)
             knobs[n++] = s;
     std::sort (std::begin (knobs), std::end (knobs), [] (auto* a, auto* b) { return a->getWidth() > b->getWidth(); });
     CHECK (std::abs (knobs[0]->getBounds().getCentreX() - editor->getWidth() / 2) <= 1);
@@ -286,4 +286,29 @@ TEST (noise_parameter_and_drag_control)
     CHECK (control->getSliderStyle() == juce::Slider::RotaryVerticalDrag || control->getSliderStyle() == juce::Slider::LinearVertical);
     control->setValue (0.7, juce::sendNotificationSync);
     CHECK_NEAR (noise->get(), 0.7, 1e-3);
+}
+
+TEST (detune_parameter_and_drag_control)
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FreezeProcessor p;
+    auto* detune = dynamic_cast<juce::AudioParameterFloat*> (p.apvts.getParameter ("detune"));
+    CHECK (detune != nullptr);
+    if (detune == nullptr)
+        return;
+    CHECK_NEAR (detune->get(), 0.0, 1e-6);
+    CHECK (detune->getName (20) == "Detune");
+    CHECK (p.apvts.getParameter ("detune")->getText (0.5f, 10) == "50 %");
+
+    std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
+    juce::Slider* control = nullptr;
+    for (auto* child : editor->getChildren())
+        if (auto* s = dynamic_cast<juce::Slider*> (child); s != nullptr && s->getName() == "Detune")
+            control = s;
+    CHECK (control != nullptr);
+    if (control == nullptr)
+        return;
+    CHECK (control->getRight() > editor->getWidth() - 60 && control->getBottom() > editor->getHeight() - 60); // bottom right
+    control->setValue (0.3, juce::sendNotificationSync);
+    CHECK_NEAR (detune->get(), 0.3, 1e-3);
 }

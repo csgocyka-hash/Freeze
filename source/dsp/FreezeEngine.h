@@ -54,6 +54,9 @@ public:
     // Fraction of grains spawned since reset() that play backwards (diagnostic).
     double reversedShare() const;
 
+    // Detune (0..1): each new grain is pitched randomly up or down by up to 50 cents x detune.
+    void setDetune (float amount);
+
     // Hold: stop recording new input, so the grains keep playing the sound captured so far.
     void setHold (bool shouldHold);
 
@@ -73,6 +76,7 @@ private:
         float gain = 1.0f; // brings the grain to the recent input level
         bool reverse = false;
         float flatMix = 0.0f; // how much the grain reads from the flattened copy
+        double rate = 1.0;    // playback speed (detune); 1 = original pitch
         bool active = false;
     };
 
@@ -99,6 +103,7 @@ private:
     void commitSegment (Channel& c, int64_t segmentTime);
     void spawnGrain (Channel& c, float amount);
     float renderGrains (Channel& c);
+    static float sourceAt (const Channel& c, int64_t index, float flatMix);
     int nextSpawnInterval (Channel& c);
     double spacingSeconds() const;
     double currentGrainSeconds() const;
@@ -115,6 +120,7 @@ private:
     float maxSmoothness = 1.0f;
     float smoothness = 0.0f; // current, from Amount
     float spectralLevel = 0.2f;
+    float detune = 0.0f;
     float hpB0 = 1.0f, hpB1 = 0.0f, hpB2 = 0.0f, hpA1 = 0.0f, hpA2 = 0.0f; // 800 Hz high-pass, used twice (24 dB/oct)
     float highPass (Channel& c, float x);
     int64_t grainsSpawned = 0, grainsReversed = 0;

@@ -57,6 +57,7 @@ private:
     std::atomic<float>* presetParam = nullptr;
     std::atomic<float>* holdParam = nullptr;
     std::atomic<float>* snowParam = nullptr;
+    std::atomic<float>* detuneParam = nullptr;
     int appliedPreset = -1;               // audio thread: preset whose density/FX the engine uses
     std::atomic<int> pendingPreset { -1 }; // preset whose starting values still need applying
     bool restoringState = false;

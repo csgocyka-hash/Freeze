@@ -29,22 +29,50 @@ public:
     juce::Colour accent { 0xff4f9dff }, accentLight { 0xffa8e0ff };
 };
 
-// Bottom-left Noise control: a halftone dot pattern that reads as noise. Drag up or down to set the Noise
-// level; the dots fill with the preset colour from the bottom up as it rises (grey at 0 %, all lit at 100 %).
-class NoiseControl : public juce::Slider
+// A small drag control drawn as an icon that fills with the preset colour from the bottom up as its value
+// rises (grey at 0 %, fully lit at 100 %). Drag up or down; double-click resets to 0.
+class FillControl : public juce::Slider
 {
 public:
-    NoiseControl();
+    explicit FillControl (const juce::String& name);
     void paint (juce::Graphics&) override;
 
     juce::Colour accent { 0xff4f9dff }, accentLight { 0xffa8e0ff };
 
+protected:
+    // Draws the icon in one colour inside `area`; top and bottom (0..1) are where the fill starts and ends
+    virtual void drawIcon (juce::Graphics&, juce::Rectangle<float> area, juce::Colour) = 0;
+    float iconTop = 0.0f, iconBottom = 1.0f;
+};
+
+// Bottom left, Noise: a halftone dot pattern that reads as noise
+class NoiseControl : public FillControl
+{
+public:
+    NoiseControl();
+
 private:
+    void drawIcon (juce::Graphics&, juce::Rectangle<float>, juce::Colour) override;
     struct Dot
     {
         float x, y, radius; // in a unit square
     };
     std::vector<Dot> dots;
+};
+
+// Bottom right, Detune: horizontal lines of different widths, each nudged slightly left or right
+class DetuneControl : public FillControl
+{
+public:
+    DetuneControl();
+
+private:
+    void drawIcon (juce::Graphics&, juce::Rectangle<float>, juce::Colour) override;
+    struct Line
+    {
+        float y, thickness, left, right; // in a unit square
+    };
+    std::vector<Line> lines;
 };
 
 // Wide panel: wordmark and preset selector on top, the big Amount knob in the middle over an ice splash
@@ -98,8 +126,9 @@ private:
     juce::Label presetName;
     SnowflakeButton snowflake;
     NoiseControl noiseControl;
+    DetuneControl detuneControl;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> holdAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> noiseAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> noiseAttachment, detuneAttachment;
     std::vector<Shard> shards;
     std::vector<float> edgeNoise; // -1..1 per edge point of the splash
     int shownPreset = -1;

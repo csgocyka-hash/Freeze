@@ -9,6 +9,7 @@ A granular VST3 effect that turns a rhythm, such as a pluck pattern, into one su
 | **FX** | Reverb and delay on the frozen sound only. |
 | **Freeze** (snowflake, top right) | Freezes the sound playing right now: nothing new is recorded, so the grains keep playing that moment for as long as Freeze is on, while new notes pass through dry. Click again to release. |
 | **Noise** (dots, bottom left) | Drag up or down to set the level (0–100 %, double-click resets); the dots fill with colour from the bottom up. Adds clean, airy noise with no low end (high-passed at 800 Hz). It also follows the big knob: louder and brighter as you turn up, sweeping from about 1.5 kHz to 14 kHz, up to about -32 dBFS. |
+| **Detune** (lines, bottom right) | Drag up or down (0–100 %, double-click resets); the lines fill with colour from the bottom up. Each grain is pitched randomly up or down, by up to 50 cents at 100 %, for a wider, chorus-like cloud. |
 | **Preset** (‹ › at the top) | Ice, Glass, Haze, Ember, Abyss. Each preset has its own colours, grain density and kind of reverb/delay, and sets Grain and FX to a starting point. |
 
 The freeze keeps holding after you stop playing, as long as Amount is up.

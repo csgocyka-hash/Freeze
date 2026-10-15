@@ -14,6 +14,7 @@ FreezeProcessor::FreezeProcessor()
     presetParam = apvts.getRawParameterValue ("preset");
     holdParam = apvts.getRawParameterValue ("hold");
     snowParam = apvts.getRawParameterValue ("noise");
+    detuneParam = apvts.getRawParameterValue ("detune");
     apvts.addParameterListener ("preset", this);
 }
 
@@ -101,6 +102,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout FreezeProcessor::createLayou
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { "noise", 1 }, "Noise", juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f,
         juce::AudioParameterFloatAttributes().withStringFromValueFunction (percent))); // the dot control
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "detune", 1 }, "Detune", juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f,
+        juce::AudioParameterFloatAttributes().withStringFromValueFunction (percent))); // the lines control: +-50 cents at 100 %
     return layout;
 }
 
@@ -139,6 +143,7 @@ void FreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     fxSmoothed.setTargetValue (fxParam->load());
     engine.setGrainSeconds (gf::grainKnobToSeconds (grainParam->load()));
     engine.setHold (holdParam->load() > 0.5f);
+    engine.setDetune (detuneParam->load());
     noiseSmoothed.setTargetValue (snowParam->load());
     if (const int index = currentPreset(); index != appliedPreset)
     {

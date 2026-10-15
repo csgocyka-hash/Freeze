@@ -113,6 +113,17 @@ void FreezeEngine::setHold (bool shouldHold)
         c.spectral.setHold (shouldHold);
 }
 
+void FreezeEngine::setDetune (float amount)
+{
+    detune = std::clamp (amount, 0.0f, 1.0f);
+}
+
+float FreezeEngine::sourceAt (const Channel& c, int64_t index, float flatMix)
+{
+    const auto i = (size_t) (index % (int64_t) c.buffer.size());
+    return flatMix > 0.0f ? c.buffer[i] + (c.flat[i] - c.buffer[i]) * flatMix : c.buffer[i];
+}
+
 void FreezeEngine::setSpectralLevel (float level)
 {
     spectralLevel = std::max (0.0f, level);
@@ -298,8 +309,10 @@ void FreezeEngine::spawnGrain (Channel& c, float amount)
     bool reverse = wantsReverse;
     for (int attempt = 0; attempt < 8; ++attempt)
     {
-        // +1: the newest segment's flattened copy is only made once the next one arrives
-        halfGrainSegments = (grainLength / 2 + segmentLength - 1) / segmentLength + 1;
+        // +1: the newest segment's flattened copy is only made once the next one arrives. Detuned grains
+        // read up to 3 % further (plus interpolation neighbours), so they keep a little more distance.
+        const int reach = detune > 0.0f ? (int) std::ceil (grainLength * 0.515) + 3 : grainLength / 2;
+        halfGrainSegments = (reach + segmentLength - 1) / segmentLength + 1;
         last = c.committedSegments - halfGrainSegments * (reverse ? 2 : 1); // exclusive
         first = std::max<int64_t> (halfGrainSegments, c.committedSegments - windowSegments);
         if (last > first)
@@ -360,6 +373,12 @@ void FreezeEngine::spawnGrain (Channel& c, float amount)
                 break;
     voice->start = chosen * segmentLength + c.random.below (segmentLength) - grainLength / 2 + loudRun * segmentLength;
 
+    // Detune: a random pitch for this grain, up to +-50 cents x detune (no random draw at 0, so the
+    // undetuned cloud stays exactly as it was)
+    double rate = 1.0;
+    if (detune > 0.0f)
+        rate = std::pow (2.0, (2.0 * c.random.uniform() - 1.0) * 50.0 * detune / 1200.0);
+
     // Level-match the grain: its windowed RMS is brought towards the recent input level (within +-6 dB),
     // so short grains on loud attacks are not louder than long grains over whole notes.
     const auto capacity = (int64_t) c.buffer.size();
@@ -367,7 +386,7 @@ void FreezeEngine::spawnGrain (Channel& c, float amount)
     for (int i = 0; i < grainLength; i += 4)
     {
         const double w = 0.5 - 0.5 * std::cos (kTwoPi * i / (grainLength - 1));
-        const auto index = (size_t) ((voice->start + i) % capacity);
+        const auto index = (size_t) ((voice->start + (int64_t) ((double) i * rate)) % capacity);
         const double x = c.buffer[index] * (1.0f - smoothness) + c.flat[index] * smoothness;
         grainSquares += w * w * x * x;
         windowSquares += w * w;
@@ -378,6 +397,7 @@ void FreezeEngine::spawnGrain (Channel& c, float amount)
     voice->length = grainLength;
     voice->reverse = reverse;
     voice->flatMix = smoothness;
+    voice->rate = rate;
     voice->active = true;
     ++grainsSpawned;
     grainsReversed += reverse ? 1 : 0;
@@ -395,9 +415,27 @@ float FreezeEngine::renderGrains (Channel& c)
         const float phase = (float) g.age * (float) kWindowTableSize / (float) (g.length - 1);
         const auto idx = std::min ((int) phase, kWindowTableSize - 1);
         const float w = window[(size_t) idx] + (window[(size_t) idx + 1] - window[(size_t) idx]) * (phase - (float) idx);
-        const int offset = g.reverse ? g.length - 1 - g.age : g.age;
-        const auto index = (size_t) ((g.start + offset) % capacity);
-        const float x = g.flatMix > 0.0f ? c.buffer[index] + (c.flat[index] - c.buffer[index]) * g.flatMix : c.buffer[index];
+        float x;
+        if (g.rate == 1.0)
+        {
+            const int offset = g.reverse ? g.length - 1 - g.age : g.age;
+            const auto index = (size_t) ((g.start + offset) % capacity);
+            x = g.flatMix > 0.0f ? c.buffer[index] + (c.flat[index] - c.buffer[index]) * g.flatMix : c.buffer[index];
+        }
+        else
+        {
+            // Detuned: read at the grain's own speed, with 4-point Hermite interpolation
+            const double span = (double) (g.length - 1) * g.rate;
+            const double position = g.reverse ? span - (double) g.age * g.rate : (double) g.age * g.rate;
+            const auto whole = (int64_t) position;
+            const auto frac = (float) (position - (double) whole);
+            const auto base = g.start + whole;
+            const float xm1 = sourceAt (c, base - 1 + capacity, g.flatMix), x0 = sourceAt (c, base, g.flatMix);
+            const float x1 = sourceAt (c, base + 1, g.flatMix), x2 = sourceAt (c, base + 2, g.flatMix);
+            const float c1 = 0.5f * (x1 - xm1), c2 = xm1 - 2.5f * x0 + 2.0f * x1 - 0.5f * x2;
+            const float c3 = 0.5f * (x2 - xm1) + 1.5f * (x0 - x1);
+            x = ((c3 * frac + c2) * frac + c1) * frac + x0;
+        }
         sum += x * w * g.gain;
         if (++g.age >= g.length)
             g.active = false;
