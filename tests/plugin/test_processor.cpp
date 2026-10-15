@@ -273,7 +273,7 @@ TEST (noise_parameter_and_drag_control)
         return;
     CHECK_NEAR (noise->get(), 0.0, 1e-6);
     CHECK (noise->getName (20) == "Noise");
-    CHECK (p.apvts.getParameter ("noise")->getText (0.4f, 10) == "40 %");
+    CHECK (p.apvts.getParameter ("noise")->getText (0.4f, 10) == "40"); // just the number
 
     std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
     juce::Slider* control = nullptr;

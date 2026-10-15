@@ -473,7 +473,7 @@ NoiseControl::NoiseControl() : juce::Slider ("Noise")
             const float r = std::sqrt (x * x + y * y) / 0.47f;
             if (r > 1.0f)
                 continue;
-            dots.push_back ({ 0.5f + x, 0.5f + y, 0.024f * (1.0f - 0.75f * r) });
+            dots.push_back ({ 0.5f + x, 0.5f + y, 0.029f * (1.0f - 0.7f * r) });
         }
 }
 
@@ -575,7 +575,7 @@ void FreezeEditor::resized()
     previous.setBounds (presetName.getX() - 28, 8, 26, 24);
     next.setBounds (presetName.getRight() + 2, 8, 26, 24);
     snowflake.setBounds (getWidth() - 48, 0, 40, 40);
-    noiseControl.setBounds (8, getHeight() - 48, 40, 40); // mirrors the snowflake in the top right
+    noiseControl.setBounds (8, getHeight() - 54, 46, 46); // bottom-left corner, opposite the snowflake
     noiseValue.setBounds (noiseControl.getRight() + 2, noiseControl.getY() + 10, 60, 20);
 
     // Big Amount knob in the middle, Grain and FX side by side underneath it
