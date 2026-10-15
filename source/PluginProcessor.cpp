@@ -148,6 +148,7 @@ void FreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     if (const int index = currentPreset(); index != appliedPreset)
     {
         engine.setDensity (gf::preset (index).density);
+        engine.setSmoothOverlap (gf::preset (index).smoothOverlap);
         engine.setFxCharacter (gf::preset (index).character);
         appliedPreset = index;
     }

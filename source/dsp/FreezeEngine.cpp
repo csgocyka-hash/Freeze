@@ -191,6 +191,11 @@ void FreezeEngine::fillFloorFrame (Channel& c, int frame)
     c.floor.addFrame();
 }
 
+void FreezeEngine::setSmoothOverlap (double grainsOverlapping)
+{
+    smoothOverlap = std::clamp (grainsOverlapping, 2.0, 32.0);
+}
+
 void FreezeEngine::setMaxSmoothness (float amount)
 {
     maxSmoothness = std::clamp (amount, 0.0f, 1.0f);
@@ -323,7 +328,7 @@ double FreezeEngine::currentGrainSeconds() const
 
 double FreezeEngine::spacingSeconds() const
 {
-    const double overlap = density + (24.0 - density) * smoothness; // up to ~24 grains overlapping
+    const double overlap = density + (smoothOverlap - density) * smoothness; // towards smoothOverlap at full Amount
     return std::min (currentGrainSeconds() / overlap, kMaxSpacingSeconds);
 }
 

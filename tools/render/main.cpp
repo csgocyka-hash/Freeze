@@ -95,6 +95,7 @@ juce::AudioBuffer<float> render (const juce::AudioBuffer<float>& dry, double sam
     engine.prepare (sampleRate, 512, 2);
     engine.setSeed (1);
     engine.setDensity (preset.density);
+    engine.setSmoothOverlap (preset.smoothOverlap);
     engine.setMaxReverseShare (s.reverse);
     engine.setDetune (s.detune);
     engine.setFxCharacter (preset.character);

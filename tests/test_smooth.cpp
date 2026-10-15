@@ -33,14 +33,15 @@ TEST (full_amount_has_no_pluck_left)
     CHECK (std::abs (smoothSkew) < plainSkew * 0.4);
 }
 
-TEST (full_amount_uses_longer_denser_grains)
+TEST (full_amount_uses_longer_grains_at_the_same_overlap)
 {
     gf::FreezeEngine plain, smooth;
     freezeAt (1.0f, pluckTrain (sr, 4.0), 0.0f, &plain);
     freezeAt (1.0f, pluckTrain (sr, 4.0), 1.0f, &smooth);
     std::printf ("    grains spawned: %lld -> %lld\n", (long long) plain.grainsSpawnedCount(), (long long) smooth.grainsSpawnedCount());
-    // Twice as long grains at ~16 instead of 6 overlapping -> about 16/6/2 = 1.33x as many spawns
-    CHECK (smooth.grainsSpawnedCount() > plain.grainsSpawnedCount() * 1.15);
+    // Twice as long grains at the same 6 overlap -> about half as many spawns
+    const double ratio = (double) smooth.grainsSpawnedCount() / (double) plain.grainsSpawnedCount();
+    CHECK (ratio > 0.4 && ratio < 0.65);
 }
 
 TEST (full_amount_keeps_pitch_and_level)
@@ -86,17 +87,25 @@ TEST (smooth_cloud_on_plucks_has_no_clicks)
     CHECK (worst < 0.02 * level);
 }
 
-TEST (full_amount_overlaps_24_grains)
+TEST (full_amount_overlaps_6_grains_or_8_when_set)
 {
-    gf::FreezeEngine e;
-    e.prepare (sr, 512, 1);
-    e.setGrainSeconds (0.25); // x2 at full Amount = 0.5 s, so 24 overlapping means a spawn every ~21 ms
-    auto in = pluckTrain (sr, 4.0);
-    std::vector<float> a (in.size(), 1.0f);
-    runEngine (e, { in }, a, 512);
-    const double perSecond = (double) e.grainsSpawnedCount() / 4.0;
-    std::printf ("    grains per second %.1f (expect ~48)\n", perSecond);
-    CHECK (perSecond > 40.0 && perSecond < 56.0);
+    // Grain 0.12 s -> 0.24 s at full Amount: 6 overlapping = a new grain every 40 ms (25 per second),
+    // 8 overlapping (short-grain presets) = every 30 ms (~33 per second)
+    auto perSecond = [] (double overlap) {
+        gf::FreezeEngine e;
+        e.prepare (sr, 512, 1);
+        e.setGrainSeconds (0.12);
+        if (overlap > 0.0)
+            e.setSmoothOverlap (overlap);
+        auto in = pluckTrain (sr, 4.0);
+        std::vector<float> a (in.size(), 1.0f);
+        runEngine (e, { in }, a, 512);
+        return (double) e.grainsSpawnedCount() / 4.0;
+    };
+    const double standard = perSecond (0.0), eight = perSecond (8.0);
+    std::printf ("    grains per second: default %.1f (expect ~25), 8 overlap %.1f (expect ~33)\n", standard, eight);
+    CHECK (standard > 21.0 && standard < 29.0);
+    CHECK (eight > 29.0 && eight < 38.0);
 }
 
 TEST (smooth_grains_read_apart_from_each_other)

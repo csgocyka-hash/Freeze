@@ -55,9 +55,12 @@ public:
     void setMaxReverseShare (float share);
 
     // How far the cloud turns smooth near full Amount (0..1, default 1). From 50 % to 100 % Amount grains
-    // get up to twice as long, about 24 overlap, and they read from a copy of the input whose note
+    // get up to twice as long, about 6 overlap (setSmoothOverlap), and they read from a copy of the input whose note
     // envelopes (attack and decay) are flattened and whose note starts are faded in, so no pluck is left.
     void setMaxSmoothness (float amount);
+
+    // How many grains overlap at full Amount (default 6; short-grain presets use 8)
+    void setSmoothOverlap (double grainsOverlapping);
 
     // Level of the random-phase spectral floor under the grains in smooth mode (faded in with smoothness),
     // relative to the grains (default 0.25 = 25 %). It is a steady, seamless version of the material
@@ -147,6 +150,7 @@ private:
     bool hold = false;
     float maxReverseShare = 0.5f;
     float maxSmoothness = 1.0f;
+    double smoothOverlap = 6.0;
     float maxDiffusion = 1.0f;
     float smoothness = 0.0f; // current, from Amount
     float floorLevel = 0.25f;
