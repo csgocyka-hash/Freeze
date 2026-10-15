@@ -8,21 +8,6 @@ const juce::Colour panelTop (0xfff4f5f7), panelBottom (0xffe2e5ea), ink (0xff3b4
 constexpr int kWidth = 560, kHeight = 330;
 constexpr float kSplashRadius = 86.0f;
 
-// Knurled rim: a ring of fine ridges, rotated with the knob so it reads as a physical part.
-juce::Path knurledRing (juce::Point<float> c, float outer, float inner, int ridges, float rotation)
-{
-    juce::Path p;
-    const int steps = ridges * 4;
-    for (int i = 0; i <= steps; ++i)
-    {
-        const float a = rotation + juce::MathConstants<float>::twoPi * (float) i / (float) steps;
-        const float r = (i % 4 == 1 || i % 4 == 2) ? outer : inner;
-        const auto pt = c.getPointOnCircumference (r, a);
-        i == 0 ? p.startNewSubPath (pt) : p.lineTo (pt);
-    }
-    p.closeSubPath();
-    return p;
-}
 } // namespace
 
 void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
@@ -58,70 +43,100 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
         g.strokePath (value, juce::PathStrokeType (ringWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 
-    // Height of the knob body (taller for the small knobs)
+    // The knob below is "maschine-white2096x96.knob" from KnobGallery (CC0), redrawn from its layer
+    // definitions so it stays sharp at any size. Sizes are fractions of the KnobMan canvas, which is
+    // chosen so the knob's rim (layer 1, 62 % of the canvas) fills our skirt radius.
+    const float canvas = skirtRadius * 2.0f / 0.62f;
+    auto disc = [&] (float zoom) { return juce::Rectangle<float> (canvas * zoom, canvas * zoom).withCentre (c); };
+    const auto lightOffset = juce::Point<float> (0.7071f, 0.7071f); // light from the top left, shadows fall down-right
+
+    // Body height for the taller small knobs: a white cylinder wall under the rim
     const float bodyHeight = size * (float) slider.getProperties().getWithDefault ("height", 0.06);
-    const auto top = juce::Rectangle<float> (skirtRadius * 2.0f, skirtRadius * 2.0f).withCentre (c);
-    const auto bottom = top.translated (0.0f, bodyHeight);
-
-    // Soft shadow falling down and to the right
+    const auto rimBounds = disc (0.62f);
     juce::Path footprint;
-    footprint.addEllipse (bottom);
-    juce::DropShadow (juce::Colour (0x80101828), (int) (size * 0.16f), { (int) (size * 0.05f), (int) (size * 0.07f) })
-        .drawForPath (g, footprint);
-    juce::DropShadow (juce::Colour (0x50101828), (int) (size * 0.04f), { (int) (size * 0.01f), (int) (size * 0.02f) })
-        .drawForPath (g, footprint);
+    footprint.addEllipse (rimBounds.translated (0.0f, bodyHeight));
+    juce::DropShadow (juce::Colour (0x70101828), (int) (canvas * 0.12f),
+                      (lightOffset * canvas * 0.05f).roundToInt()).drawForPath (g, footprint);
+    if (bodyHeight > 0.5f)
+    {
+        juce::Path wall;
+        wall.addRectangle (rimBounds.getX(), c.y, rimBounds.getWidth(), bodyHeight);
+        wall.addEllipse (rimBounds.translated (0.0f, bodyHeight));
+        juce::ColourGradient side (juce::Colour (0xff9a9fa7), rimBounds.getX(), 0.0f, juce::Colour (0xff8c919a), rimBounds.getRight(), 0.0f, false);
+        side.addColour (0.25, juce::Colour (0xffe6e8eb));
+        side.addColour (0.45, juce::Colour (0xffffffff));
+        side.addColour (0.8, juce::Colour (0xffbfc3c9));
+        g.setGradientFill (side);
+        g.fillPath (wall);
+    }
 
-    // Dark body side wall, lit down the left-centre
-    juce::Path wall;
-    wall.addRectangle (top.getX(), c.y, top.getWidth(), bodyHeight);
-    wall.addEllipse (bottom);
-    juce::ColourGradient side (juce::Colour (0xff23272d), top.getX(), 0.0f, juce::Colour (0xff1c1f24), top.getRight(), 0.0f, false);
-    side.addColour (0.3, juce::Colour (0xff5d636c));
-    side.addColour (0.45, juce::Colour (0xff484d55));
-    side.addColour (0.8, juce::Colour (0xff2c3036));
-    g.setGradientFill (side);
-    g.fillPath (wall);
+    // Layer 1: white disc with a strong, soft inner shadow (density 100 %, diffuse 64 %) -> polished rim
+    g.setColour (juce::Colours::white);
+    g.fillEllipse (rimBounds);
+    {
+        juce::ColourGradient inner (juce::Colours::black.withAlpha (0.0f), c.x, c.y,
+                                    juce::Colours::black.withAlpha (0.38f), c.x + rimBounds.getWidth() * 0.5f, c.y, true);
+        inner.addColour (0.6, juce::Colours::black.withAlpha (0.0f));
+        inner.addColour (0.88, juce::Colours::black.withAlpha (0.12f));
+        g.setGradientFill (inner);
+        g.fillEllipse (rimBounds);
+        // Light falls on the upper left of the rim and leaves the lower right darker
+        juce::ColourGradient light (juce::Colours::white.withAlpha (0.8f), c.x, rimBounds.getY(),
+                                    juce::Colours::black.withAlpha (0.42f), c.x, rimBounds.getBottom(), false);
+        light.addColour (0.45, juce::Colours::white.withAlpha (0.1f));
+        g.setGradientFill (light);
+        g.fillEllipse (rimBounds);
+    }
 
-    // Dark knurled rim, catching light at the top
-    auto rim = knurledRing (c, skirtRadius, skirtRadius * 0.93f, size > 100 ? 56 : 30, angle);
-    juce::ColourGradient rimLight (juce::Colour (0xff767c86), c.x, c.y - skirtRadius, juce::Colour (0xff1f2328),
-                                   c.x, c.y + skirtRadius, false);
-    rimLight.addColour (0.5, juce::Colour (0xff3e434a));
-    g.setGradientFill (rimLight);
-    g.fillPath (rim);
+    // Layer 8: seven white tick marks on the rim (every 45.7 degrees within -140..140), slightly glossy
+    {
+        const float outerR = canvas * 0.57f * 0.5f, innerR = outerR * (1.0f - 0.12f * 2.0f);
+        const float tickWidth = juce::jmax (1.0f, canvas * 0.57f * 0.05f * 0.5f);
+        for (int i = -3; i <= 3; ++i)
+        {
+            const float a = juce::degreesToRadians (45.7f * (float) i);
+            g.setColour (juce::Colours::black.withAlpha (0.25f));
+            g.drawLine ({ c.getPointOnCircumference (innerR, a).translated (0.4f, 0.6f),
+                          c.getPointOnCircumference (outerR, a).translated (0.4f, 0.6f) }, tickWidth);
+            g.setColour (juce::Colours::white);
+            g.drawLine ({ c.getPointOnCircumference (innerR, a), c.getPointOnCircumference (outerR, a) }, tickWidth);
+        }
+    }
 
-    // White domed top: bright highlight at the upper left, grey towards the lower right edge
-    const float capR = skirtRadius * 0.86f;
-    const auto capBounds = juce::Rectangle<float> (capR * 2.0f, capR * 2.0f).withCentre (c);
-    juce::ColourGradient dome (juce::Colours::white, c.x - capR * 0.35f, c.y - capR * 0.4f,
-                               juce::Colour (0xffa9aeb6), c.x + capR * 0.8f, c.y + capR * 0.95f, true);
-    dome.addColour (0.5, juce::Colour (0xfff2f3f5));
-    dome.addColour (0.8, juce::Colour (0xffd3d6db));
-    g.setGradientFill (dome);
-    g.fillEllipse (capBounds);
+    // Layer 3: white disc with soft diffuse shading (27 %)
+    const auto midBounds = disc (0.49f);
+    g.setGradientFill (juce::ColourGradient (juce::Colours::white, midBounds.getX(), midBounds.getY(),
+                                             juce::Colour (0xffbdbdbd), midBounds.getRight(), midBounds.getBottom(), false));
+    g.fillEllipse (midBounds);
 
-    // Glossy reflection on the upper half
-    auto shine = capBounds.reduced (capR * 0.22f).withTrimmedBottom (capR * 0.95f).translated (-capR * 0.05f, -capR * 0.08f);
-    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.95f), c.x, shine.getY(),
-                                             juce::Colours::white.withAlpha (0.0f), c.x, shine.getBottom(), false));
-    g.fillEllipse (shine);
+    // Layer 4: light grey cap (#D6D6D6) casting a shadow down-right (offset 12 %, density 80 %, diffuse 40 %),
+    // with a light top-left edge (highlight 26 %)
+    const auto capBounds = disc (0.43f);
+    {
+        juce::Path cap;
+        cap.addEllipse (capBounds);
+        juce::DropShadow (juce::Colours::black.withAlpha (0.8f), (int) (canvas * 0.43f * 0.4f * 0.5f),
+                          (lightOffset * canvas * 0.43f * 0.12f * 0.5f).roundToInt()).drawForPath (g, cap);
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xffe0e0e0), capBounds.getX(), capBounds.getY(),
+                                                 juce::Colour (0xffcbcbcb), capBounds.getRight(), capBounds.getBottom(), false));
+        g.fillPath (cap);
+        g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.75f), capBounds.getX(), capBounds.getY(),
+                                                 juce::Colours::white.withAlpha (0.0f), capBounds.getCentreX(), capBounds.getCentreY(), false));
+        g.strokePath (cap, juce::PathStrokeType (juce::jmax (1.0f, canvas * 0.012f)));
+    }
 
-    // Thin dark edge where the dome meets the rim
-    g.setColour (juce::Colour (0x55000000));
-    g.drawEllipse (capBounds, 0.9f);
-
-    // Black pointer line from near the centre to the edge of the top
-    const auto inner = c.getPointOnCircumference (capR * 0.18f, angle);
-    const auto outer = c.getPointOnCircumference (capR * 0.97f, angle);
-    const float pointerWidth = juce::jmax (2.2f, size * 0.032f);
-    juce::Path pointer;
-    pointer.startNewSubPath (inner);
-    pointer.lineTo (outer);
-    juce::PathStrokeType stroke (pointerWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
-    g.setColour (juce::Colours::white.withAlpha (0.7f));
-    g.strokePath (pointer, stroke, juce::AffineTransform::translation (0.5f, 0.8f));
-    g.setColour (juce::Colour (0xff15171b));
-    g.strokePath (pointer, stroke);
+    // Layer 5: black pointer line turning from -140 to +140 degrees
+    {
+        const float lineCentre = canvas * 0.20f * 0.80f, halfLength = canvas * 0.26f * 0.80f * 0.5f;
+        const auto inner = c.getPointOnCircumference (juce::jmax (0.0f, lineCentre - halfLength), angle);
+        const auto outer = c.getPointOnCircumference (juce::jmin (capBounds.getWidth() * 0.47f, lineCentre + halfLength), angle);
+        juce::Path pointer;
+        pointer.startNewSubPath (inner);
+        pointer.lineTo (outer);
+        g.setColour (juce::Colours::black);
+        g.strokePath (pointer, juce::PathStrokeType (juce::jmax (1.8f, canvas * 0.08f * 0.80f * 0.4f),
+                                                     juce::PathStrokeType::curved, juce::PathStrokeType::butt));
+    }
 }
 
 FreezeEditor::FreezeEditor (FreezeProcessor& p)
