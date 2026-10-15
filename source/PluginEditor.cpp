@@ -55,7 +55,7 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
 
     // Tick marks: opaque white, close together
     {
-        const int ticks = variant == 0 ? 41 : (variant == 1 ? 61 : 51);
+        const int ticks = variant == 0 ? 81 : (variant == 1 ? 121 : 101);
         const float tickWidth = juce::jmax (0.5f, size * 0.0045f); // hairline ticks
         for (int i = 0; i < ticks; ++i)
         {
