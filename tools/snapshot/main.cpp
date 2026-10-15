@@ -1,5 +1,5 @@
 // Renders the plugin window to a PNG, no DAW or audio device needed.
-//   snapshot out.png [amount 0..1] [preset 0..4] [light.ttf medium.ttf semibold.ttf [caps]]
+//   snapshot out.png [amount 0..1] [preset 0..8] [hold] [unlink] [invert] [light.ttf medium.ttf semibold.ttf [caps]]
 //   Add "hold" (Freeze on), "noise=0.4", "detune=0.4" and/or "closeup" (enlarged bottom corners)
 //   anywhere after out.png.
 #include "PluginEditor.h"
@@ -35,8 +35,8 @@ int main (int argc, char** argv)
     amount->setValueNotifyingHost (argc > 2 && juce::String (argv[2]) != "hold" && juce::String (argv[2]) != "menu" && ! juce::String (argv[2]).startsWith ("splash=") && juce::String (argv[2]) != "detunecorner" && ! juce::String (argv[2]).startsWith ("warp=") && juce::String (argv[2]) != "window" && ! juce::String (argv[2]).startsWith ("noise=") && ! juce::String (argv[2]).startsWith ("detune=") ? (float) std::atof (argv[2]) : 0.6f);
 
     for (int i = 2; i < argc; ++i)
-        if (juce::String (argv[i]) == "hold")
-            processor.apvts.getParameter ("hold")->setValueNotifyingHost (1.0f);
+        if (juce::String (argv[i]) == "hold" || juce::String (argv[i]) == "unlink" || juce::String (argv[i]) == "invert")
+            processor.apvts.getParameter (argv[i])->setValueNotifyingHost (1.0f);
         else if (juce::String (argv[i]).startsWith ("detune="))
             processor.apvts.getParameter ("detune")->setValueNotifyingHost (juce::String (argv[i]).fromFirstOccurrenceOf ("=", false, false).getFloatValue());
         else if (juce::String (argv[i]).startsWith ("noise="))

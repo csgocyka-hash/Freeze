@@ -42,6 +42,11 @@ public:
 
     int currentPreset() const;
 
+    // Rhythm divisions: 1/8, 1/8 dotted, 1/4, 1/2 and 1 bar, in beats
+    static constexpr double kDivisionBeats[] = { 0.5, 0.75, 1.0, 2.0, 4.0 };
+    static juce::StringArray divisionNames() { return { "1/8", "1/8D", "1/4", "1/2", "1" }; }
+    static juce::String pulseTimeText (float time); // e.g. "1/16"
+
 private:
     void parameterChanged (const juce::String& parameterID, float newValue) override;
     void handleAsyncUpdate() override;
@@ -58,6 +63,10 @@ private:
     std::atomic<float>* holdParam = nullptr;
     std::atomic<float>* snowParam = nullptr;
     std::atomic<float>* detuneParam = nullptr;
+    std::atomic<float>* divisionParam = nullptr;
+    std::atomic<float>* unlinkParam = nullptr;
+    std::atomic<float>* timeParam = nullptr;
+    std::atomic<float>* invertParam = nullptr;
     int appliedPreset = -1;               // audio thread: preset whose density/FX the engine uses
     std::atomic<int> pendingPreset { -1 }; // preset whose starting values still need applying
     bool restoringState = false;

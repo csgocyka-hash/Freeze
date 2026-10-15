@@ -270,6 +270,21 @@ FreezePanel::FreezePanel (FreezeProcessor& p)
     detuneControl.setComponentID ("detune");
     addAndMakeVisible (detuneControl);
 
+    // Preset-specific controls, top left under the header
+    division.onClick = [this] { showDivisionMenu(); };
+    unlinkAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (freezeProcessor.apvts, "unlink", unlink);
+    invertAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (freezeProcessor.apvts, "invert", invert);
+    unlink.setButtonText ("UNLINK");
+    unlink.setTooltip ("Set the pulse speed with its own knob instead of Amount");
+    invert.setButtonText ("INVERT");
+    invert.setTooltip ("Play only while the input is silent");
+    division.setTooltip ("Step length");
+    for (auto* button : { &division, &unlink, &invert })
+        addChildComponent (*button);
+    unlink.onStateChange = [this] { if (time.slider.isVisible() != (unlink.isVisible() && unlink.getToggleState())) updateExtras(); };
+    setupKnob (time, "Time", "time");
+    time.slider.setComponentID ("time");
+
     // Shards scattered around the hexagon edge; fixed seed so the splash always looks the same.
     juce::Random rng (2026);
     // Edge roughness: random values smoothed over neighbours, so the edge is chunky rather than hairy
@@ -310,7 +325,7 @@ FreezePanel::FreezePanel (FreezeProcessor& p)
 
 FreezePanel::~FreezePanel()
 {
-    for (auto* knob : { &amount, &grain, &fx })
+    for (auto* knob : { &amount, &grain, &fx, &time })
         knob->slider.setLookAndFeel (nullptr);
     previous.setLookAndFeel (nullptr);
     next.setLookAndFeel (nullptr);
@@ -366,6 +381,53 @@ void FreezePanel::timerCallback()
 {
     if (freezeProcessor.currentPreset() != shownPreset)
         applyPresetColours();
+    updateExtras();
+}
+
+void FreezePanel::updateExtras()
+{
+    const auto mode = gf::preset (freezeProcessor.currentPreset()).mode;
+    const bool unlinked = freezeProcessor.apvts.getRawParameterValue ("unlink")->load() > 0.5f;
+    auto show = [] (juce::Component& c, bool visible) { if (c.isVisible() != visible) c.setVisible (visible); };
+    show (division, mode == gf::EngineMode::rhythm);
+    show (unlink, mode == gf::EngineMode::pulse);
+    show (time.slider, mode == gf::EngineMode::pulse && unlinked);
+    show (time.label, mode == gf::EngineMode::pulse && unlinked);
+    show (invert, mode == gf::EngineMode::follow);
+
+    const auto names = FreezeProcessor::divisionNames();
+    const auto text = names[juce::jlimit (0, names.size() - 1, (int) freezeProcessor.apvts.getRawParameterValue ("division")->load())];
+    if (division.getButtonText() != text)
+        division.setButtonText (text);
+}
+
+void FreezePanel::showDivisionMenu()
+{
+    const auto names = FreezeProcessor::divisionNames();
+    const int current = (int) freezeProcessor.apvts.getRawParameterValue ("division")->load();
+    juce::PopupMenu menu;
+    menu.setLookAndFeel (&lookAndFeel);
+    for (int i = 0; i < names.size(); ++i)
+        menu.addItem (i + 1, names[i], true, i == current);
+    juce::Component::SafePointer<FreezePanel> safe (this);
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&division), [safe] (int chosen) {
+        if (safe == nullptr || chosen <= 0)
+            return;
+        auto* param = safe->freezeProcessor.apvts.getParameter ("division");
+        param->beginChangeGesture();
+        param->setValueNotifyingHost (param->convertTo0to1 ((float) (chosen - 1)));
+        param->endChangeGesture();
+        safe->updateExtras();
+    });
+}
+
+void TextToggle::paintButton (juce::Graphics& g, bool isHighlighted, bool)
+{
+    const bool on = getClickingTogglesState() && getToggleState();
+    const auto colour = on ? accent.withAlpha (0.85f) : ink.withAlpha (isHighlighted ? 0.7f : 0.42f);
+    g.setColour (colour);
+    g.setFont (juce::Font (uiFont (10.0f, "Medium")));
+    g.drawText (getButtonText(), getLocalBounds(), juce::Justification::centredLeft, false);
 }
 
 void FreezePanel::applyPresetColours()
@@ -388,8 +450,14 @@ void FreezePanel::applyPresetColours()
 
     presetName.setText (labelText (preset.name), juce::dontSendNotification);
     presetName.setColour (juce::Label::textColourId, ink);
-    for (auto* knob : { &grain, &fx })
+    for (auto* knob : { &grain, &fx, &time })
         knob->label.setColour (juce::Label::textColourId, accentDeep);
+    for (auto* button : { &division, &unlink, &invert })
+    {
+        button->accent = accentDeep;
+        button->repaint();
+    }
+    updateExtras();
     amount.label.setVisible (false); // the big knob needs no caption
     repaint();
 }
@@ -651,7 +719,12 @@ void FreezePanel::resized()
     grain.slider.setBounds (centreX - 64 - 22, getHeight() - 92, 44, 50);
     fx.slider.setBounds (centreX + 64 - 22, getHeight() - 92, 44, 50);
 
-    for (auto* knob : { &amount, &grain, &fx })
+    // Preset-specific controls just under the header on the left; Pulse's Time knob under UNLINK
+    for (auto* button : { &division, &unlink, &invert })
+        button->setBounds (14, kHeaderHeight + 6, 60, 18);
+    time.slider.setBounds (14, kHeaderHeight + 26, 40, 46);
+
+    for (auto* knob : { &amount, &grain, &fx, &time })
         knob->label.setBounds (juce::Rectangle<int> (110, 20).withCentre ({ knob->slider.getBounds().getCentreX(),
                                                                            knob->slider.getBottom() + 2 }));
 }

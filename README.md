@@ -10,7 +10,11 @@ A granular VST3 effect that turns a rhythm, such as a pluck pattern, into one su
 | **Freeze** (snowflake, top right) | Freezes the sound playing right now: nothing new is recorded, so the grains keep playing that moment for as long as Freeze is on, while new notes pass through dry. Click again to release. |
 | **Noise** (dots, bottom left) | Drag up or down to set the level (0–100 %, double-click resets); the dots fill with colour from the bottom up. Adds clean, airy noise with no low end (high-passed at 800 Hz). It also follows the big knob: louder and brighter as you turn up, sweeping from about 1.5 kHz to 14 kHz, up to about -32 dBFS. |
 | **Detune** (lines, bottom right) | Drag up or down (0–100 %, double-click resets); the lines fill with colour from the bottom up. Each grain is pitched randomly up or down, by up to 50 cents at 100 %, for a wider, chorus-like cloud. |
-| **Preset** (‹ › at the top) | Ice, Glass, Haze, Ember, Abyss. Each preset has its own colours, grain density and kind of reverb/delay, and sets Grain and FX to a starting point. |
+| **Preset** (‹ › at the top) | Ice, Glass, Haze, Ember, Abyss, Octave, Rhythm, Pulse, Follow. Each preset has its own colours, grain density, tone (EQ, saturation, chorus, width) and kind of reverb/delay, and sets Grain, FX and Noise to a starting point. |
+| **Octave** | Some grains play an octave up, spread wide. |
+| **Rhythm** — division (top left, e.g. "1/4") | The frozen sound steps to a new slice every 1/8, 1/8 dotted, 1/4, 1/2 or 1 bar, in time with the host (120 BPM without one). Click the division to choose. |
+| **Pulse** — UNLINK / TIME (top left) | A volume pulse that speeds up with Amount from 1/2 to 1/64, getting shallower as it speeds up, and steady at 100 %. UNLINK shows a TIME knob that sets the speed on its own. |
+| **Follow** — INVERT (top left) | The frozen sound plays only while the input plays. INVERT: only while the input is silent (sidechain style). |
 
 The freeze keeps holding after you stop playing, as long as Amount is up.
 
@@ -28,7 +32,7 @@ The VST3 is copied to `~/Library/Audio/Plug-Ins/VST3/Freeze.vst3`. The Standalon
 ## Listening without a DAW
 
 ```bash
-# every preset on the built-in 8 s pluck rhythm -> renders/01 Ice.wav ... 05 Abyss.wav (+ 00 Dry.wav)
+# every preset on the built-in 8 s pluck rhythm -> renders/01 Ice.wav ... 09 Follow.wav (+ 00 Dry.wav)
 build/render_artefacts/Release/render --test-pluck --all
 
 # one preset with Amount sweeping 0 -> 100 %
@@ -44,10 +48,14 @@ build/render_artefacts/Release/render --test-pluck --preset Ice --grain-sweep --
 build/render_artefacts/Release/render --test-pluck --preset Ice --hold-at 2.6 --out "renders/Ice hold.wav"
 
 # your own audio, with your own knob settings (0..1)
+build/render_artefacts/Release/render --test-pluck --preset Rhythm --freeze 1 --division 1/8D --bpm 100 --out "renders/Rhythm.wav"
+# Pulse with its speed unlinked (--time 0..1), Follow inverted
+build/render_artefacts/Release/render --test-pluck --preset Pulse --freeze 0.6 --time 0.5 --out "renders/Pulse.wav"
+build/render_artefacts/Release/render --test-pluck --preset Follow --freeze 1 --invert --out "renders/Follow invert.wav"
 build/render_artefacts/Release/render --in my_plucks.wav --preset Glass --grain 0.3 --fx 0.5 --out renders/mine.wav
 ```
 
-To see the plugin window as a PNG (Amount 0..1, preset 0..4):
+To see the plugin window as a PNG (Amount 0..1, preset 0..8; add `unlink` or `invert` to switch those on):
 
 ```bash
 build/snapshot_artefacts/Release/snapshot renders/ui.png 0.65 2

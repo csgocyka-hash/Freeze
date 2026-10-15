@@ -81,6 +81,22 @@ private:
     std::vector<Line> lines;
 };
 
+// Small, semi-transparent text in the top left for a preset's own setting (e.g. "1/4", "UNLINK", "INVERT").
+// As a toggle it lights up in the preset colour when on.
+class TextToggle : public juce::Button
+{
+public:
+    TextToggle (const juce::String& id, bool toggles) : juce::Button (id)
+    {
+        setComponentID (id);
+        setClickingTogglesState (toggles);
+        setMouseCursor (juce::MouseCursor::PointingHandCursor);
+    }
+    void paintButton (juce::Graphics&, bool isHighlighted, bool isDown) override;
+
+    juce::Colour accent { 0xff2a55e6 };
+};
+
 // Invisible click area over the FREEZE logo; clicking it opens the Scaling menu
 class LogoHotspot : public juce::Component, public juce::SettableTooltipClient
 {
@@ -115,6 +131,10 @@ public:
     LogoHotspot logo;
     FreezeLookAndFeel& getLookAndFeelForMenus() { return lookAndFeel; }
 
+    // Shows the top-left controls that belong to the current preset (Rhythm: division, Pulse: unlink and
+    // time, Follow: invert) and hides the rest
+    void updateExtras();
+
 private:
     struct Shard
     {
@@ -135,19 +155,21 @@ private:
     void setupKnob (Knob&, const juce::String& name, const juce::String& paramId);
     void updateLabel (Knob&);
     void stepPreset (int delta);
+    void showDivisionMenu();
     void applyPresetColours();
     void drawSplash (juce::Graphics&, juce::Point<float> centre, float amount) const;
     juce::Path splashShape (juce::Point<float> centre, float radius, float rough, int seedOffset, float wobbleScale) const;
 
     FreezeProcessor& freezeProcessor;
     FreezeLookAndFeel lookAndFeel;
-    Knob amount, grain, fx;
+    Knob amount, grain, fx, time;
     juce::TextButton previous { juce::CharPointer_UTF8 ("\xe2\x80\xb9") }, next { juce::CharPointer_UTF8 ("\xe2\x80\xba") };
     juce::Label presetName;
     SnowflakeButton snowflake;
     NoiseControl noiseControl;
     DetuneControl detuneControl;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> holdAttachment;
+    TextToggle division { "division", false }, unlink { "unlink", true }, invert { "invert", true };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> holdAttachment, unlinkAttachment, invertAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> noiseAttachment, detuneAttachment;
     std::vector<Shard> shards;
     std::vector<float> edgeNoise; // -1..1 per edge point of the splash
@@ -170,6 +192,7 @@ public:
     void setUiScale (float scale);
     float getUiScale() const;
     void showScaleMenu();
+    void refreshForTests() { panel.updateExtras(); } // the panel otherwise catches up on its timer
 
     // Typefaces for the wordmark (light), preset name (medium) and labels (semibold): embedded Montserrat,
     // replaceable for previews

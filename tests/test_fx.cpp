@@ -51,8 +51,8 @@ TEST (presets_table)
     const double grains[] = { 0.120, 0.050, 0.300, 0.180, 0.500 };
     const double densities[] = { 6, 10, 6, 4, 4 };
     const float fxStarts[] = { 0.0f, 0.2f, 0.4f, 0.35f, 0.7f };
-    CHECK (gf::kNumPresets == 5);
-    for (int i = 0; i < gf::kNumPresets; ++i)
+    CHECK (gf::kNumPresets == 9);
+    for (int i = 0; i < 5; ++i)
     {
         CHECK (std::strcmp (gf::preset (i).name, names[i]) == 0);
         CHECK_NEAR (gf::preset (i).grainSeconds, grains[i], 1e-9);
@@ -62,4 +62,22 @@ TEST (presets_table)
     CHECK_NEAR (gf::preset (3).character.delaySeconds, 0.3, 1e-6);
     CHECK_NEAR (gf::preset (4).character.delaySeconds, 0.6, 1e-6);
     CHECK (gf::preset (0).character.delayLevel == 0.0f);
+}
+
+TEST (presets_have_their_own_tone_and_behaviour)
+{
+    const char* names[] = { "Octave", "Rhythm", "Pulse", "Follow" };
+    const gf::EngineMode modes[] = { gf::EngineMode::normal, gf::EngineMode::rhythm, gf::EngineMode::pulse, gf::EngineMode::follow };
+    for (int i = 0; i < 4; ++i)
+    {
+        CHECK (std::strcmp (gf::preset (5 + i).name, names[i]) == 0);
+        CHECK (gf::preset (5 + i).mode == modes[i]);
+    }
+    CHECK (gf::preset (5).octaveShare > 0.2f && gf::preset (5).tone.width > 1.3f); // Octave: pitched up and wide
+    CHECK (gf::preset (1).smoothOverlap == 8.0 && gf::preset (6).smoothOverlap == 8.0); // short grains: 8 voices
+    // Tones differ: Abyss is darkest, Ember is the most saturated, Glass the brightest
+    CHECK (gf::preset (4).tone.highShelfDb < gf::preset (2).tone.highShelfDb);
+    CHECK (gf::preset (3).tone.saturation >= gf::preset (2).tone.saturation);
+    CHECK (gf::preset (1).tone.highShelfDb > gf::preset (0).tone.highShelfDb);
+    CHECK (gf::preset (0).mode == gf::EngineMode::normal && gf::preset (0).octaveShare == 0.0f);
 }

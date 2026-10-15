@@ -141,7 +141,7 @@ TEST (three_parameters_and_preset)
     CHECK_NEAR (paramValue (p, "fx"), 0.0, 1e-6);
     CHECK_NEAR (paramValue (p, "preset"), 0.0, 1e-6);
     auto* preset = dynamic_cast<juce::AudioParameterChoice*> (p.apvts.getParameter ("preset"));
-    CHECK (preset != nullptr && preset->choices.size() == 5 && preset->choices[2] == "Haze");
+    CHECK (preset != nullptr && preset->choices.size() == 9 && preset->choices[2] == "Haze");
 }
 
 TEST (preset_sets_grain_and_fx)
@@ -158,7 +158,7 @@ TEST (programs_are_presets)
 {
     juce::ScopedJuceInitialiser_GUI gui;
     FreezeProcessor p;
-    CHECK (p.getNumPrograms() == 5);
+    CHECK (p.getNumPrograms() == 9);
     CHECK (p.getProgramName (4) == "Abyss");
     p.setCurrentProgram (3);
     p.handleUpdateNowIfNeeded();
@@ -194,7 +194,7 @@ TEST (editor_has_three_knobs)
     std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
     int sliders = 0;
     for (auto* child : panelOf (*editor).getChildren())
-        sliders += dynamic_cast<juce::Slider*> (child) != nullptr ? 1 : 0;
+        sliders += dynamic_cast<juce::Slider*> (child) != nullptr && child->isVisible() ? 1 : 0;
     CHECK (sliders == 5); // Amount, Grain, FX and the Noise and Detune drag controls
 
     // Big Amount knob in the middle, the two small knobs below it
@@ -362,4 +362,46 @@ TEST (logo_scale_menu_sizes)
     q.setStateInformation (state.getData(), (int) state.getSize());
     std::unique_ptr<juce::AudioProcessorEditor> reopened (q.createEditor());
     CHECK (reopened->getWidth() == 462);
+}
+
+TEST (preset_extra_parameters)
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FreezeProcessor p;
+    auto* division = dynamic_cast<juce::AudioParameterChoice*> (p.apvts.getParameter ("division"));
+    CHECK (division != nullptr && division->choices.size() == 5 && division->choices[1] == "1/8D" && division->getIndex() == 2);
+    CHECK (dynamic_cast<juce::AudioParameterBool*> (p.apvts.getParameter ("unlink")) != nullptr);
+    CHECK (dynamic_cast<juce::AudioParameterFloat*> (p.apvts.getParameter ("time")) != nullptr);
+    CHECK (dynamic_cast<juce::AudioParameterBool*> (p.apvts.getParameter ("invert")) != nullptr);
+    // Choosing a preset also sets its starting Noise level
+    setParam (p, "preset", 3.0f); // Ember
+    p.handleUpdateNowIfNeeded();
+    CHECK (p.apvts.getRawParameterValue ("noise")->load() > 0.1f);
+}
+
+TEST (preset_extras_show_only_with_their_preset)
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FreezeProcessor p;
+    std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
+    auto& panel = panelOf (*editor);
+    auto visible = [&] (const char* id) { auto* c = panel.findChildWithID (id); return c != nullptr && c->isVisible(); };
+    auto choose = [&] (int index) {
+        setParam (p, "preset", (float) index);
+        p.handleUpdateNowIfNeeded();
+        if (auto* f = dynamic_cast<FreezeEditor*> (editor.get()))
+            f->refreshForTests();
+    };
+    choose (0);
+    CHECK (! visible ("division") && ! visible ("unlink") && ! visible ("invert") && ! visible ("time"));
+    choose (6); // Rhythm
+    CHECK (visible ("division") && ! visible ("unlink"));
+    choose (7); // Pulse
+    CHECK (visible ("unlink") && ! visible ("time"));
+    setParam (p, "unlink", 1.0f);
+    if (auto* f = dynamic_cast<FreezeEditor*> (editor.get()))
+        f->refreshForTests();
+    CHECK (visible ("time"));
+    choose (8); // Follow
+    CHECK (visible ("invert") && ! visible ("unlink") && ! visible ("time"));
 }

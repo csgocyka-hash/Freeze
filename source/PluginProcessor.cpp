@@ -15,6 +15,10 @@ FreezeProcessor::FreezeProcessor()
     holdParam = apvts.getRawParameterValue ("hold");
     snowParam = apvts.getRawParameterValue ("noise");
     detuneParam = apvts.getRawParameterValue ("detune");
+    divisionParam = apvts.getRawParameterValue ("division");
+    unlinkParam = apvts.getRawParameterValue ("unlink");
+    timeParam = apvts.getRawParameterValue ("time");
+    invertParam = apvts.getRawParameterValue ("invert");
     apvts.addParameterListener ("preset", this);
 }
 
@@ -45,6 +49,13 @@ void FreezeProcessor::handleAsyncUpdate()
     const auto& preset = gf::preset (index);
     setParameterValue ("grain", gf::grainSecondsToKnob (preset.grainSeconds));
     setParameterValue ("fx", preset.fx);
+    setParameterValue ("noise", preset.noise);
+}
+
+juce::String FreezeProcessor::pulseTimeText (float time)
+{
+    // A note value: 4 beats = a whole note, so 2 beats = 1/2 and 1/16 beat = 1/64
+    return "1/" + juce::String (juce::roundToInt (4.0 / gf::FreezeEngine::pulseBeats (time)));
 }
 
 void FreezeProcessor::setParameterValue (const char* id, float value)
@@ -105,6 +116,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout FreezeProcessor::createLayou
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { "detune", 1 }, "Detune", juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f,
         juce::AudioParameterFloatAttributes().withStringFromValueFunction (percent))); // the lines control: +-50 cents at 100 %
+    // Preset-specific controls, shown top left only with their preset
+    layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "division", 1 }, "Division", divisionNames(), 2)); // Rhythm
+    layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "unlink", 1 }, "Unlink", false)); // Pulse
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "time", 1 }, "Time", juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f,
+        juce::AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return pulseTimeText (v); }))); // Pulse, unlinked
+    layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "invert", 1 }, "Invert", false)); // Follow
     return layout;
 }
 
@@ -150,8 +168,20 @@ void FreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         engine.setDensity (gf::preset (index).density);
         engine.setSmoothOverlap (gf::preset (index).smoothOverlap);
         engine.setFxCharacter (gf::preset (index).character);
+        engine.setTone (gf::preset (index).tone);
+        engine.setMode (gf::preset (index).mode);
+        engine.setOctaveShare (gf::preset (index).octaveShare);
         appliedPreset = index;
     }
+    double bpm = 120.0;
+    if (auto* playHead = getPlayHead())
+        if (auto position = playHead->getPosition())
+            if (auto hostBpm = position->getBpm(); hostBpm.hasValue() && *hostBpm > 0.0)
+                bpm = *hostBpm;
+    engine.setTempo (bpm);
+    engine.setRhythmBeats (kDivisionBeats[juce::jlimit (0, 4, (int) divisionParam->load())]);
+    engine.setPulse (unlinkParam->load() > 0.5f, timeParam->load());
+    engine.setFollowInvert (invertParam->load() > 0.5f);
     const int numChannels = buffer.getNumChannels();
 
     // Hosts may send blocks larger than announced, so work in chunks of the prepared size.

@@ -1,7 +1,8 @@
 // Offline renderer: hear Freeze without a DAW.
 //
 //   render [--test-pluck | --in file.wav] [--preset Name | --all] [--freeze 0..1 | --sweep] [--grain-sweep]
-//          [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--reverse 0..1] [--noise 0..1] [--detune 0..1 | --detune-sweep] [--out file.wav]
+//          [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--reverse 0..1] [--noise 0..1] [--detune 0..1 | --detune-sweep]
+//          [--bpm 120] [--division 1/8|1/8D|1/4|1/2|1] [--time 0..1 (Pulse, unlinked)] [--invert (Follow)] [--out file.wav]
 //
 // Writes "00 Dry.wav" next to the output for comparison. --all writes one file per preset.
 #include "dsp/FreezeEngine.h"
@@ -82,7 +83,11 @@ struct Settings
     float grain = -1.0f, fx = -1.0f; // -1: use the preset's starting value
     double holdAt = -1.0;           // seconds; switch Hold on from this point (-1: never)
     float reverse = 0.5f;           // share of reversed grains at full Amount
-    float noise = 0.0f;             // Noise control level (0..1)
+    float noise = -1.0f;            // Noise control level (0..1; -1: the preset's starting value)
+    double bpm = 120.0;             // tempo for Rhythm and Pulse
+    double divisionBeats = 1.0;     // Rhythm step (1/4)
+    float time = -1.0f;             // Pulse speed unlinked from Amount (0..1; -1: linked)
+    bool invert = false;            // Follow: play while the input is silent
     bool grainSweep = false;        // Grain knob ramps 0 -> 1 over the file
     float detune = 0.0f;            // Detune control (0..1 = up to +-50 cents per grain)
     bool detuneSweep = false;       // Detune ramps 0 -> 1 over the file
@@ -99,12 +104,19 @@ juce::AudioBuffer<float> render (const juce::AudioBuffer<float>& dry, double sam
     engine.setMaxReverseShare (s.reverse);
     engine.setDetune (s.detune);
     engine.setFxCharacter (preset.character);
+    engine.setTone (preset.tone);
+    engine.setMode (preset.mode);
+    engine.setOctaveShare (preset.octaveShare);
+    engine.setTempo (s.bpm);
+    engine.setRhythmBeats (s.divisionBeats);
+    engine.setPulse (s.time >= 0.0f, std::max (0.0f, s.time));
+    engine.setFollowInvert (s.invert);
     engine.setGrainSeconds (s.grain >= 0.0f ? gf::grainKnobToSeconds (s.grain) : preset.grainSeconds);
     const float fx = s.fx >= 0.0f ? s.fx : preset.fx;
 
     gf::Snowfall snowfall;
     snowfall.prepare (sampleRate, 2);
-    std::vector<float> noiseAmount (512, s.noise);
+    std::vector<float> noiseAmount (512, s.noise >= 0.0f ? s.noise : preset.noise);
 
     auto out = dry;
     const int length = out.getNumSamples();
@@ -164,6 +176,14 @@ int main (int argc, char** argv)
         else if (arg == "--hold-at" && hasValue) settings.holdAt = std::atof (argv[++i]);
         else if (arg == "--reverse" && hasValue) settings.reverse = (float) std::atof (argv[++i]);
         else if (arg == "--noise" && hasValue) settings.noise = (float) std::atof (argv[++i]);
+        else if (arg == "--bpm" && hasValue) settings.bpm = std::atof (argv[++i]);
+        else if (arg == "--time" && hasValue) settings.time = (float) std::atof (argv[++i]);
+        else if (arg == "--invert") settings.invert = true;
+        else if (arg == "--division" && hasValue)
+        {
+            const juce::String d (argv[++i]);
+            settings.divisionBeats = d == "1/8" ? 0.5 : d == "1/8D" ? 0.75 : d == "1/2" ? 2.0 : d == "1" ? 4.0 : 1.0;
+        }
         else if (arg == "--all") all = true;
         else if (arg == "--test-pluck") inPath = {};
         else if (arg == "--preset" && hasValue)
@@ -171,14 +191,14 @@ int main (int argc, char** argv)
             settings.preset = presetIndex (argv[++i]);
             if (settings.preset < 0)
             {
-                std::fprintf (stderr, "Unknown preset. Choose Ice, Glass, Haze, Ember or Abyss.\n");
+                std::fprintf (stderr, "Unknown preset. Choose Ice, Glass, Haze, Ember, Abyss, Octave, Rhythm, Pulse or Follow.\n");
                 return 1;
             }
         }
         else
         {
             std::fprintf (stderr, "Usage: render [--test-pluck | --in file.wav] [--preset Name | --all] "
-                                  "[--freeze 0..1 | --sweep] [--grain-sweep] [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--reverse 0..1] [--noise 0..1] [--detune 0..1 | --detune-sweep] [--out file.wav]\n");
+                                  "[--freeze 0..1 | --sweep] [--grain-sweep] [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--reverse 0..1] [--noise 0..1] [--detune 0..1 | --detune-sweep] [--bpm 120] [--division 1/8|1/8D|1/4|1/2|1] [--time 0..1] [--invert] [--out file.wav]\n");
             return 1;
         }
     }
