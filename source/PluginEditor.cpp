@@ -218,7 +218,7 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
     {
         // Big knob: a straight light grey line of even width
         const auto direction = juce::Point<float> (std::sin (angle), -std::cos (angle));
-        const auto side = juce::Point<float> (std::cos (angle), std::sin (angle)) * juce::jmax (0.9f, knobRadius * 0.02f);
+        const auto side = juce::Point<float> (std::cos (angle), std::sin (angle)) * 0.4f; // a hairline, under 1 px
         const auto base = c + direction * (knobRadius * 0.16f);
         const auto tip = c + direction * (knobRadius * 0.86f);
         juce::Path needle;
