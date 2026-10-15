@@ -58,14 +58,20 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
         g.fillPath (tri);
     }
 
-    // Hairline tick marks, fully white
-    g.setColour (juce::Colours::white);
+    // Hairline tick marks: solid white at the outer end, fading out towards the knob
     constexpr int ticks = 121;
-    const float tickWidth = juce::jmax (0.35f, size * 0.0028f);
+    const float tickWidth = juce::jmax (0.25f, size * 0.0018f);
+    const float tickInner = tickOuter - tickLength;
     for (int i = 0; i < ticks; ++i)
     {
         const float a = startAngle + (endAngle - startAngle) * (float) i / (float) (ticks - 1);
-        g.drawLine ({ c.getPointOnCircumference (tickOuter - tickLength, a), c.getPointOnCircumference (tickOuter, a) }, tickWidth);
+        const auto outerPoint = c.getPointOnCircumference (tickOuter, a);
+        const auto innerPoint = c.getPointOnCircumference (tickInner, a);
+        g.setGradientFill (juce::ColourGradient (juce::Colours::white, outerPoint, juce::Colours::white.withAlpha (0.0f), innerPoint, false));
+        juce::Path tick;
+        tick.startNewSubPath (outerPoint);
+        tick.lineTo (innerPoint);
+        g.strokePath (tick, juce::PathStrokeType (tickWidth));
     }
 
     // ---- Knob ----
@@ -119,13 +125,13 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
                                              juce::Colour (0x55000000), c.x, face.getBottom(), false));
     g.drawEllipse (face.reduced (0.5f), juce::jmax (1.0f, knobRadius * 0.035f));
 
-    // Black pointer line, set into the face (light lower edge)
+    // Super-thin black pointer line, set into the face (light lower edge)
     juce::Path pointer;
     pointer.startNewSubPath (c.getPointOnCircumference (knobRadius * 0.12f, angle));
     pointer.lineTo (c.getPointOnCircumference (knobRadius * 0.84f, angle));
-    const juce::PathStrokeType stroke (juce::jmax (1.6f, knobRadius * 0.07f), juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
+    const juce::PathStrokeType stroke (juce::jmax (0.8f, knobRadius * 0.022f), juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
     g.setColour (juce::Colours::white.withAlpha (0.8f));
-    g.strokePath (pointer, stroke, juce::AffineTransform::translation (0.0f, 0.7f));
+    g.strokePath (pointer, stroke, juce::AffineTransform::translation (0.0f, 0.5f));
     g.setColour (juce::Colour (0xff111214));
     g.strokePath (pointer, stroke);
 }
