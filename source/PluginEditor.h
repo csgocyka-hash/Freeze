@@ -75,24 +75,17 @@ private:
     std::vector<Line> lines;
 };
 
-// Wide panel: wordmark and preset selector on top, the big Amount knob in the middle over an ice splash
+// The plugin's face, at its design size: wordmark and preset selector on top, the big Amount knob in the middle over an ice splash
 // that shatters as the amount rises, and the small Grain and FX knobs underneath. Colours follow the preset.
-class FreezeEditor : public juce::AudioProcessorEditor, private juce::Timer
+class FreezePanel : public juce::Component, private juce::Timer
 {
 public:
-    explicit FreezeEditor (FreezeProcessor&);
-    ~FreezeEditor() override;
+    static constexpr int designWidth = 560, designHeight = 400;
+
+    explicit FreezePanel (FreezeProcessor&);
+    ~FreezePanel() override;
 
     void paint (juce::Graphics&) override;
-
-    // Typefaces for the wordmark (light), preset name (medium) and labels (semibold): embedded Montserrat,
-    // replaceable for previews
-    struct FontSet
-    {
-        juce::Typeface::Ptr light, medium, semibold;
-        bool capitals = false; // preset name and labels in spaced capitals
-    };
-    static FontSet& fonts();
     void resized() override;
 
 private:
@@ -134,6 +127,33 @@ private:
     int shownPreset = -1;
     juce::Image noise;
     juce::Colour accent, accentLight, accentDeep;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FreezePanel)
+};
+
+// The plugin window: holds the panel, drawn at its design size and scaled to the window. It opens small
+// (70 %) and can be resized from the corner, keeping its proportions; the chosen size is saved.
+class FreezeEditor : public juce::AudioProcessorEditor
+{
+public:
+    explicit FreezeEditor (FreezeProcessor&);
+    void resized() override;
+
+    // Typefaces for the wordmark (light), preset name (medium) and labels (semibold): embedded Montserrat,
+    // replaceable for previews
+    struct FontSet
+    {
+        juce::Typeface::Ptr light, medium, semibold;
+        bool capitals = false; // preset name and labels in spaced capitals
+    };
+    static FontSet& fonts();
+
+    static constexpr float defaultScale = 0.7f, minScale = 0.5f, maxScale = 1.5f;
+
+private:
+    FreezeProcessor& freezeProcessor;
+    FreezePanel panel;
+    bool sizeIsSet = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FreezeEditor)
 };

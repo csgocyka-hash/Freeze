@@ -14,6 +14,8 @@ A granular VST3 effect that turns a rhythm, such as a pluck pattern, into one su
 
 The freeze keeps holding after you stop playing, as long as Amount is up.
 
+The window opens small (392 × 280) and can be resized from its edges between 280 × 200 and 840 × 600, keeping its proportions; the size is saved with your project.
+
 ## Build on macOS (no admin needed)
 
 ```bash
@@ -31,6 +33,9 @@ build/render_artefacts/Release/render --test-pluck --all
 
 # one preset with Amount sweeping 0 -> 100 %
 build/render_artefacts/Release/render --test-pluck --preset Haze --sweep --out "renders/Haze sweep.wav"
+
+# Detune sweeping from 0 to 100 % over the file, at Amount 45 %
+build/render_artefacts/Release/render --test-pluck --preset Ice --freeze 0.45 --detune-sweep --out "renders/Ice detune sweep.wav"
 
 # Grain knob sweeping from 40 ms to 500 ms over the file, at Amount 45 %
 build/render_artefacts/Release/render --test-pluck --preset Ice --grain-sweep --freeze 0.45 --out "renders/Ice grain sweep.wav"

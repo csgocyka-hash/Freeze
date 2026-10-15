@@ -114,6 +114,12 @@ TEST (editor_opens)
 
 namespace
 {
+// The editor holds one scaled panel; the controls live inside it, laid out at the panel's full size
+juce::Component& panelOf (juce::AudioProcessorEditor& editor)
+{
+    return *editor.getChildComponent (0);
+}
+
 float paramValue (FreezeProcessor& p, const char* id)
 {
     return p.apvts.getRawParameterValue (id)->load();
@@ -187,18 +193,18 @@ TEST (editor_has_three_knobs)
     FreezeProcessor p;
     std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
     int sliders = 0;
-    for (auto* child : editor->getChildren())
+    for (auto* child : panelOf (*editor).getChildren())
         sliders += dynamic_cast<juce::Slider*> (child) != nullptr ? 1 : 0;
     CHECK (sliders == 5); // Amount, Grain, FX and the Noise and Detune drag controls
 
     // Big Amount knob in the middle, the two small knobs below it
     juce::Slider* knobs[3] {};
     int n = 0;
-    for (auto* child : editor->getChildren())
+    for (auto* child : panelOf (*editor).getChildren())
         if (auto* s = dynamic_cast<juce::Slider*> (child); s != nullptr && s->getName() != "Noise" && s->getName() != "Detune" && n < 3)
             knobs[n++] = s;
     std::sort (std::begin (knobs), std::end (knobs), [] (auto* a, auto* b) { return a->getWidth() > b->getWidth(); });
-    CHECK (std::abs (knobs[0]->getBounds().getCentreX() - editor->getWidth() / 2) <= 1);
+    CHECK (std::abs (knobs[0]->getBounds().getCentreX() - panelOf (*editor).getWidth() / 2) <= 1);
     CHECK (knobs[1]->getY() > knobs[0]->getBottom() - 10);
     CHECK (knobs[2]->getY() > knobs[0]->getBottom() - 10);
 }
@@ -223,7 +229,7 @@ TEST (labels_are_spaced_capitals_in_montserrat_light)
     if (FreezeEditor::fonts().medium != nullptr)
         CHECK (FreezeEditor::fonts().medium->getStyle().containsIgnoreCase ("Light"));
     bool foundGrain = false;
-    for (auto* child : editor->getChildren())
+    for (auto* child : panelOf (*editor).getChildren())
         if (auto* label = dynamic_cast<juce::Label*> (child))
             foundGrain = foundGrain || label->getText() == "GRAIN";
     CHECK (foundGrain);
@@ -253,7 +259,7 @@ TEST (snowflake_button_toggles_hold)
     FreezeProcessor p;
     std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
     juce::Button* snowflake = nullptr;
-    for (auto* child : editor->getChildren())
+    for (auto* child : panelOf (*editor).getChildren())
         if (auto* b = dynamic_cast<juce::Button*> (child); b != nullptr && b->getName() == "Freeze")
             snowflake = b;
     CHECK (snowflake != nullptr);
@@ -277,7 +283,7 @@ TEST (noise_parameter_and_drag_control)
 
     std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
     juce::Slider* control = nullptr;
-    for (auto* child : editor->getChildren())
+    for (auto* child : panelOf (*editor).getChildren())
         if (auto* s = dynamic_cast<juce::Slider*> (child); s != nullptr && s->getName() == "Noise")
             control = s;
     CHECK (control != nullptr);
@@ -302,13 +308,29 @@ TEST (detune_parameter_and_drag_control)
 
     std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
     juce::Slider* control = nullptr;
-    for (auto* child : editor->getChildren())
+    for (auto* child : panelOf (*editor).getChildren())
         if (auto* s = dynamic_cast<juce::Slider*> (child); s != nullptr && s->getName() == "Detune")
             control = s;
     CHECK (control != nullptr);
     if (control == nullptr)
         return;
-    CHECK (control->getRight() > editor->getWidth() - 60 && control->getBottom() > editor->getHeight() - 60); // bottom right
+    auto& panel = panelOf (*editor);
+    CHECK (control->getRight() > panel.getWidth() - 60 && control->getBottom() > panel.getHeight() - 60); // bottom right
     control->setValue (0.3, juce::sendNotificationSync);
     CHECK_NEAR (detune->get(), 0.3, 1e-3);
+}
+
+TEST (editor_opens_small_and_scales)
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FreezeProcessor p;
+    std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
+    auto& panel = panelOf (*editor);
+    CHECK (editor->getWidth() == 392 && editor->getHeight() == 280); // opens at 70 %, small on screen
+    CHECK (editor->isResizable());
+    // The panel keeps its design size and is scaled to fill the window
+    const auto shown = panel.getBoundsInParent();
+    CHECK (std::abs (shown.getWidth() - editor->getWidth()) <= 1 && std::abs (shown.getHeight() - editor->getHeight()) <= 1);
+    editor->setSize (840, 600);
+    CHECK (std::abs (panel.getBoundsInParent().getWidth() - 840) <= 1);
 }

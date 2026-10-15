@@ -48,7 +48,7 @@ juce::String labelText (const juce::String& text)
 
 const juce::Colour panelTop (0xfff4f5f7), panelBottom (0xffe2e5ea), ink (0xff3b4250), inkSoft (0xff8a92a0);
 
-constexpr int kWidth = 560, kHeight = 400, kHeaderHeight = 40;
+constexpr int kWidth = FreezePanel::designWidth, kHeight = FreezePanel::designHeight, kHeaderHeight = 40;
 constexpr float kSplashRadius = 108.0f;
 
 } // namespace
@@ -239,9 +239,8 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
     }
 }
 
-FreezeEditor::FreezeEditor (FreezeProcessor& p)
-    : AudioProcessorEditor (p),
-      freezeProcessor (p)
+FreezePanel::FreezePanel (FreezeProcessor& p)
+    : freezeProcessor (p)
 {
     setupKnob (amount, "Amount", "freeze");
     setupKnob (grain, "Grain", "grain");
@@ -260,7 +259,7 @@ FreezeEditor::FreezeEditor (FreezeProcessor& p)
     next.onClick = [this] { stepPreset (1); };
 
     presetName.setJustificationType (juce::Justification::centred);
-    presetName.setFont (uiFont (fonts().capitals ? 14.0f : 16.0f, "Medium"));
+    presetName.setFont (uiFont (FreezeEditor::fonts().capitals ? 14.0f : 16.0f, "Medium"));
     presetName.setInterceptsMouseClicks (false, false);
     addAndMakeVisible (presetName);
 
@@ -308,11 +307,11 @@ FreezeEditor::FreezeEditor (FreezeProcessor& p)
         }
 
     applyPresetColours();
-    setSize (kWidth, kHeight);
+    setSize (designWidth, designHeight);
     startTimerHz (20);
 }
 
-FreezeEditor::~FreezeEditor()
+FreezePanel::~FreezePanel()
 {
     for (auto* knob : { &amount, &grain, &fx })
         knob->slider.setLookAndFeel (nullptr);
@@ -320,7 +319,7 @@ FreezeEditor::~FreezeEditor()
     next.setLookAndFeel (nullptr);
 }
 
-void FreezeEditor::setupKnob (Knob& knob, const juce::String& name, const juce::String& paramId)
+void FreezePanel::setupKnob (Knob& knob, const juce::String& name, const juce::String& paramId)
 {
     knob.name = name;
     knob.paramId = paramId;
@@ -335,13 +334,13 @@ void FreezeEditor::setupKnob (Knob& knob, const juce::String& name, const juce::
     addAndMakeVisible (knob.slider);
 
     knob.label.setJustificationType (juce::Justification::centred);
-    knob.label.setFont (fonts().capitals ? uiFont (11.0f, "Demi Bold") : uiFont (12.5f, "Demi Bold").withKerningFactor (0.08f));
+    knob.label.setFont (FreezeEditor::fonts().capitals ? uiFont (11.0f, "Demi Bold") : uiFont (12.5f, "Demi Bold").withKerningFactor (0.08f));
     knob.label.setInterceptsMouseClicks (false, false);
     addAndMakeVisible (knob.label);
     updateLabel (knob);
 }
 
-void FreezeEditor::updateLabel (Knob& knob)
+void FreezePanel::updateLabel (Knob& knob)
 {
     // Shows the knob's name, or its value while it is being dragged.
     const bool showValue = knob.slider.isMouseButtonDown();
@@ -360,19 +359,19 @@ FreezeEditor::FontSet& FreezeEditor::fonts()
     return set;
 }
 
-void FreezeEditor::stepPreset (int delta)
+void FreezePanel::stepPreset (int delta)
 {
     const int index = (freezeProcessor.currentPreset() + delta + gf::kNumPresets) % gf::kNumPresets;
     freezeProcessor.setCurrentProgram (index);
 }
 
-void FreezeEditor::timerCallback()
+void FreezePanel::timerCallback()
 {
     if (freezeProcessor.currentPreset() != shownPreset)
         applyPresetColours();
 }
 
-void FreezeEditor::applyPresetColours()
+void FreezePanel::applyPresetColours()
 {
     shownPreset = freezeProcessor.currentPreset();
     const auto& preset = gf::preset (shownPreset);
@@ -400,7 +399,7 @@ void FreezeEditor::applyPresetColours()
     repaint();
 }
 
-juce::Path FreezeEditor::splashShape (juce::Point<float> c, float radius, float rough, int seedOffset, float wobbleScale) const
+juce::Path FreezePanel::splashShape (juce::Point<float> c, float radius, float rough, int seedOffset, float wobbleScale) const
 {
     juce::Path blob;
     const auto n = edgeNoise.size();
@@ -418,7 +417,7 @@ juce::Path FreezeEditor::splashShape (juce::Point<float> c, float radius, float 
     return blob;
 }
 
-void FreezeEditor::drawSplash (juce::Graphics& g, juce::Point<float> c, float level) const
+void FreezePanel::drawSplash (juce::Graphics& g, juce::Point<float> c, float level) const
 {
     // Three nested splashes: a big pale one, a lighter middle one and the coloured core.
     // Each layer grows with the amount; the outer layers grow the most, so turning up spreads the splash out.
@@ -574,7 +573,7 @@ void SnowflakeButton::paintButton (juce::Graphics& g, bool isHighlighted, bool i
     }
 }
 
-void FreezeEditor::paint (juce::Graphics& g)
+void FreezePanel::paint (juce::Graphics& g)
 {
     const auto bounds = getLocalBounds().toFloat();
     const float level = (float) amount.slider.getValue();
@@ -614,7 +613,7 @@ void FreezeEditor::paint (juce::Graphics& g)
     g.drawImage (noise, bounds);
 }
 
-void FreezeEditor::resized()
+void FreezePanel::resized()
 {
     const auto centreX = getWidth() / 2;
     presetName.setBounds (juce::Rectangle<int> (140, 24).withCentre ({ centreX, 20 }));
@@ -634,4 +633,32 @@ void FreezeEditor::resized()
     for (auto* knob : { &amount, &grain, &fx })
         knob->label.setBounds (juce::Rectangle<int> (110, 20).withCentre ({ knob->slider.getBounds().getCentreX(),
                                                                            knob->slider.getBottom() + 2 }));
+}
+
+FreezeEditor::FreezeEditor (FreezeProcessor& p)
+    : AudioProcessorEditor (p),
+      freezeProcessor (p),
+      panel (p)
+{
+    // Read the saved size first: setting the limits below resizes the still-empty window
+    const int width = freezeProcessor.apvts.state.getProperty ("uiWidth", (int) (FreezePanel::designWidth * defaultScale));
+
+    addAndMakeVisible (panel);
+    setResizable (true, false); // resizable from the window edges; no corner grip over the Detune control
+    setResizeLimits ((int) (FreezePanel::designWidth * minScale), (int) (FreezePanel::designHeight * minScale),
+                     (int) (FreezePanel::designWidth * maxScale), (int) (FreezePanel::designHeight * maxScale));
+    getConstrainer()->setFixedAspectRatio ((double) FreezePanel::designWidth / FreezePanel::designHeight);
+
+    setSize (width, juce::roundToInt (width * (double) FreezePanel::designHeight / FreezePanel::designWidth));
+    sizeIsSet = true;
+}
+
+void FreezeEditor::resized()
+{
+    // The panel keeps its design size; a transform scales it to the window
+    const float scale = (float) getWidth() / (float) FreezePanel::designWidth;
+    panel.setBounds (0, 0, FreezePanel::designWidth, FreezePanel::designHeight);
+    panel.setTransform (juce::AffineTransform::scale (scale));
+    if (sizeIsSet) // only the user's resizes are remembered
+        freezeProcessor.apvts.state.setProperty ("uiWidth", getWidth(), nullptr);
 }

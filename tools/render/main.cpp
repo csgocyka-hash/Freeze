@@ -1,7 +1,7 @@
 // Offline renderer: hear Freeze without a DAW.
 //
 //   render [--test-pluck | --in file.wav] [--preset Name | --all] [--freeze 0..1 | --sweep] [--grain-sweep]
-//          [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--reverse 0..1] [--noise 0..1] [--detune 0..1] [--out file.wav]
+//          [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--reverse 0..1] [--noise 0..1] [--detune 0..1 | --detune-sweep] [--out file.wav]
 //
 // Writes "00 Dry.wav" next to the output for comparison. --all writes one file per preset.
 #include "dsp/FreezeEngine.h"
@@ -85,6 +85,7 @@ struct Settings
     float noise = 0.0f;             // Noise control level (0..1)
     bool grainSweep = false;        // Grain knob ramps 0 -> 1 over the file
     float detune = 0.0f;            // Detune control (0..1 = up to +-50 cents per grain)
+    bool detuneSweep = false;       // Detune ramps 0 -> 1 over the file
 };
 
 juce::AudioBuffer<float> render (const juce::AudioBuffer<float>& dry, double sampleRate, const Settings& s)
@@ -113,6 +114,8 @@ juce::AudioBuffer<float> render (const juce::AudioBuffer<float>& dry, double sam
         for (int i = 0; i < n; ++i)
             amount[(size_t) i] = s.sweep ? (float) (pos + i) / (float) length : s.freeze;
         engine.setHold (s.holdAt >= 0.0 && pos >= (int) (s.holdAt * sampleRate));
+        if (s.detuneSweep)
+            engine.setDetune ((float) pos / (float) length);
         if (s.grainSweep)
             engine.setGrainSeconds (gf::grainKnobToSeconds ((float) pos / (float) length));
         float* channels[2] = { out.getWritePointer (0, pos), out.getWritePointer (1, pos) };
@@ -156,6 +159,7 @@ int main (int argc, char** argv)
         else if (arg == "--sweep") settings.sweep = true;
         else if (arg == "--grain-sweep") settings.grainSweep = true;
         else if (arg == "--detune" && hasValue) settings.detune = (float) std::atof (argv[++i]);
+        else if (arg == "--detune-sweep") settings.detuneSweep = true;
         else if (arg == "--hold-at" && hasValue) settings.holdAt = std::atof (argv[++i]);
         else if (arg == "--reverse" && hasValue) settings.reverse = (float) std::atof (argv[++i]);
         else if (arg == "--noise" && hasValue) settings.noise = (float) std::atof (argv[++i]);
@@ -173,7 +177,7 @@ int main (int argc, char** argv)
         else
         {
             std::fprintf (stderr, "Usage: render [--test-pluck | --in file.wav] [--preset Name | --all] "
-                                  "[--freeze 0..1 | --sweep] [--grain-sweep] [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--reverse 0..1] [--noise 0..1] [--detune 0..1] [--out file.wav]\n");
+                                  "[--freeze 0..1 | --sweep] [--grain-sweep] [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--reverse 0..1] [--noise 0..1] [--detune 0..1 | --detune-sweep] [--out file.wav]\n");
             return 1;
         }
     }
