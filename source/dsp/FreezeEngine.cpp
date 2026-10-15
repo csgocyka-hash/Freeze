@@ -23,7 +23,7 @@ void FreezeEngine::prepare (double newSampleRate, int /*maxBlockSize*/, int numC
     tone.prepare (sampleRate, numChannels);
     releaseLength = std::max (1, (int) std::lround (0.010 * sampleRate)); // Rhythm steps: 10 ms fade
     followAttack = (float) (1.0 - std::exp (-1.0 / (0.005 * sampleRate)));
-    followRelease = (float) (1.0 - std::exp (-1.0 / (0.150 * sampleRate)));
+    followRelease = (float) (1.0 - std::exp (-1.0 / (0.030 * sampleRate)));
     grainPowerCoeff = (float) (1.0 - std::exp (-1.0 / (1.0 * sampleRate))); // 1 s
 
     channelState.assign ((size_t) std::max (1, numChannels), Channel {});
@@ -213,13 +213,14 @@ float FreezeEngine::modeGain (float amount, float input)
     }
     if (mode == EngineMode::follow)
     {
-        // Follow the input's level (5 ms attack, 150 ms release) relative to its usual sounding level
+        // Follow the input's level (5 ms attack, 30 ms release) relative to its usual sounding level: fully
+        // open from 30 % of its usual peak, so quieter playing and decaying tails still play through
         const float level = std::abs (input);
         followEnvelope += (level > followEnvelope ? followAttack : followRelease) * (level - followEnvelope);
         float reference = 0.0f;
         for (const auto& c : channelState)
             reference = std::max (reference, c.levelReference);
-        const float g = reference > 0.0f ? std::clamp (followEnvelope / (0.6f * 1.4142f * reference), 0.0f, 1.0f) : 0.0f;
+        const float g = reference > 0.0f ? std::clamp (followEnvelope / (0.3f * 1.4142f * reference), 0.0f, 1.0f) : 0.0f;
         return followInvert ? 1.0f - g : g;
     }
     return 1.0f;

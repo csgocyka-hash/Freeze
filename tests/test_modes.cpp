@@ -116,6 +116,37 @@ TEST (follow_plays_only_with_the_input_or_inverted_only_without)
     CHECK (iQuiet > iPlay * 2.0);
 }
 
+TEST (follow_closes_quickly_when_the_input_stops)
+{
+    // A short release: 120-170 ms after the input stops, the frozen sound is at least 20 dB down
+    auto in = sine (sr, 2.0, 220.0, 0.5f);
+    in.resize ((size_t) (3 * sr), 0.0f);
+    Setup follow;
+    follow.mode = gf::EngineMode::follow;
+    auto out = render (follow, in, 1.0f);
+    const double playing = rms (out.data() + (size_t) (1.5 * sr), 2400);
+    const double after = rms (out.data() + (size_t) (2.12 * sr), 2400);
+    std::printf ("    120-170 ms after the input stops: %.1f dB\n", 20.0 * std::log10 (after / playing));
+    CHECK (after < playing * 0.1);
+}
+
+TEST (follow_opens_fully_on_quieter_playing)
+{
+    // A low threshold: playing 8 dB quieter than usual still opens Follow fully, so inverted it stays shut
+    auto in = sine (sr, 2.0, 220.0, 0.5f);
+    auto quiet = sine (sr, 0.5, 220.0, 0.2f);
+    in.insert (in.end(), quiet.begin(), quiet.end());
+    in.resize ((size_t) (4 * sr), 0.0f);
+    Setup follow;
+    follow.mode = gf::EngineMode::follow;
+    follow.invert = true;
+    auto out = render (follow, in, 1.0f);
+    const double duringQuiet = rms (out.data() + (size_t) (2.2 * sr), 12000);
+    const double silent = rms (out.data() + (size_t) (3.0 * sr), 24000);
+    std::printf ("    inverted while playing quietly: %.1f dB below silence\n", 20.0 * std::log10 (silent / duringQuiet));
+    CHECK (duringQuiet < silent * 0.1);
+}
+
 TEST (modes_are_block_size_independent)
 {
     for (auto mode : { gf::EngineMode::rhythm, gf::EngineMode::pulse, gf::EngineMode::follow })
