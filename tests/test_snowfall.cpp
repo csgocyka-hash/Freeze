@@ -60,7 +60,7 @@ TEST (snowfall_level_follows_amount)
     std::printf ("    rms at 0 / 50 / 100 %%: %.5f %.5f %.5f (%.1f dBFS at 100 %%)\n", atZero, atHalf, atFull, 20.0 * std::log10 (atFull));
     CHECK (atZero == 0.0);
     CHECK (atHalf < atFull * 0.7);
-    CHECK (std::abs (20.0 * std::log10 (atFull) + 24.0) < 2.0);
+    CHECK (std::abs (20.0 * std::log10 (atFull) + 32.0) < 2.0);
 }
 
 TEST (snowfall_has_no_low_end)

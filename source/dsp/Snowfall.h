@@ -1,7 +1,7 @@
 #pragma once
 // Snowfall: clean, airy noise added to the output. Its level and brightness follow the Amount knob: a
 // 24 dB/oct high-pass at 800 Hz removes all low end, and a smooth (non-resonant) low-pass sweeps from
-// 1.5 kHz at low Amount to 14 kHz at full Amount. Switching it on or off fades over 30 ms.
+// 1.5 kHz at low Amount to 14 kHz at full Amount, up to -32 dBFS. Switching it on or off fades over 30 ms.
 // JUCE-free; everything is allocated in prepare().
 #include "Random.h"
 #include <cstdint>

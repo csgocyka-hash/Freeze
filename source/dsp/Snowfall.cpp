@@ -9,7 +9,7 @@ namespace
 constexpr double kTwoPi = 6.283185307179586;
 constexpr double kHighPassHz = 800.0;
 constexpr double kSweepFromHz = 1500.0, kSweepToHz = 14000.0;
-constexpr float kFullLevel = 0.063f; // -24 dBFS RMS at full Amount
+constexpr float kFullLevel = 0.025f; // -32 dBFS RMS at full Amount
 constexpr int kCoefficientInterval = 16; // samples between low-pass updates while sweeping
 } // namespace
 
