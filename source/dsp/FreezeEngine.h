@@ -23,6 +23,10 @@ constexpr int kMaxGrains = 64;
 constexpr int kWindowTableSize = 4096;
 constexpr double kSelectSeconds = 1.5;
 constexpr float kSelectThreshold = 0.25f;
+// Smooth mode keeps the read positions of grains playing at the same time this far apart (two grains reading
+// within ~50 ms of each other comb-filter, which sounds phasey), trying up to kSpacingTries positions.
+constexpr double kMinReadSpacingSeconds = 0.040;
+constexpr int kSpacingTries = 16;
 
 class FreezeEngine
 {
@@ -53,6 +57,10 @@ public:
 
     // Fraction of grains spawned since reset() that play backwards (diagnostic).
     double reversedShare() const;
+
+    // Fraction of grains spawned since reset() that started reading within kMinReadSpacingSeconds of where a
+    // playing grain of the same direction reads (diagnostic: such pairs comb-filter).
+    double closeReadShare() const;
 
     // Detune (0..1): each new grain is pitched randomly up or down by up to 50 cents x detune.
     void setDetune (float amount);
@@ -123,7 +131,8 @@ private:
     float detune = 0.0f;
     float hpB0 = 1.0f, hpB1 = 0.0f, hpB2 = 0.0f, hpA1 = 0.0f, hpA2 = 0.0f; // 800 Hz high-pass, used twice (24 dB/oct)
     float highPass (Channel& c, float x);
-    int64_t grainsSpawned = 0, grainsReversed = 0;
+    int64_t grainsSpawned = 0, grainsReversed = 0, grainsClose = 0;
+    double readDistance (const Channel& c, int64_t readIndex, bool reverse, const Grain* ignore) const;
     FxChain fx;
     int stagingFill = 0;
     int64_t sampleCounter = 0;

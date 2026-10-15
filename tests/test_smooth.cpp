@@ -151,3 +151,17 @@ TEST (full_amount_overlaps_24_grains)
     std::printf ("    grains per second %.1f (expect ~48)\n", perSecond);
     CHECK (perSecond > 40.0 && perSecond < 56.0);
 }
+
+TEST (smooth_grains_read_apart_from_each_other)
+{
+    // Two grains reading almost the same spot at the same time form a comb filter (phasing). In smooth mode
+    // a new grain should start reading at least 40 ms away from every playing grain of the same direction.
+    // (With ~12 grains per direction in 1.5 s of material that is not always possible; picked at random,
+    // about half of them start too close.)
+    gf::FreezeEngine plain, smooth;
+    freezeAt (1.0f, pluckTrain (sr, 8.0), 0.0f, &plain);
+    freezeAt (1.0f, pluckTrain (sr, 8.0), 1.0f, &smooth);
+    std::printf ("    grains starting within 40 ms of a playing grain: plain %.3f, smooth %.3f\n", plain.closeReadShare(),
+                 smooth.closeReadShare());
+    CHECK (smooth.closeReadShare() < 0.2);
+}

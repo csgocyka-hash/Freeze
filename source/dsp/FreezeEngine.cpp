@@ -48,7 +48,7 @@ void FreezeEngine::reset()
 {
     stagingFill = 0;
     sampleCounter = 0;
-    grainsSpawned = grainsReversed = 0;
+    grainsSpawned = grainsReversed = grainsClose = 0;
     bypassed = false;
     fx.reset();
     for (size_t ch = 0; ch < channelState.size(); ++ch)
@@ -104,6 +104,25 @@ void FreezeEngine::setMaxReverseShare (float share)
 double FreezeEngine::reversedShare() const
 {
     return grainsSpawned > 0 ? (double) grainsReversed / (double) grainsSpawned : 0.0;
+}
+
+double FreezeEngine::closeReadShare() const
+{
+    return grainsSpawned > 0 ? (double) grainsClose / (double) grainsSpawned : 0.0;
+}
+
+double FreezeEngine::readDistance (const Channel& c, int64_t readIndex, bool reverse, const Grain* ignore) const
+{
+    // Distance from readIndex to where the nearest playing grain of the same direction reads now. Grains of
+    // one direction move through the material at the same speed, so this distance stays (about) the same.
+    double nearest = 1.0e18;
+    for (const auto& g : c.grains)
+        if (g.active && g.reverse == reverse && &g != ignore)
+        {
+            const double position = g.reverse ? (double) (g.length - 1 - g.age) * g.rate : (double) g.age * g.rate;
+            nearest = std::min (nearest, std::abs ((double) readIndex - ((double) g.start + position)));
+        }
+    return nearest;
 }
 
 void FreezeEngine::setHold (bool shouldHold)
@@ -341,15 +360,6 @@ void FreezeEngine::spawnGrain (Channel& c, float amount)
     for (int64_t s = first; s < last; ++s)
         eligible += c.energy[(size_t) (s % bufferSegments)] >= threshold ? 1 : 0;
 
-    int pick = c.random.below (eligible);
-    int64_t chosen = first;
-    for (int64_t s = first; s < last; ++s)
-        if (c.energy[(size_t) (s % bufferSegments)] >= threshold && pick-- == 0)
-        {
-            chosen = s;
-            break;
-        }
-
     // Use a free voice, or steal the one that has played longest.
     Grain* voice = &c.grains[0];
     for (auto& g : c.grains)
@@ -363,15 +373,50 @@ void FreezeEngine::spawnGrain (Channel& c, float amount)
             voice = &g;
     }
 
-    // A forward grain is centred on the chosen spot, so the loud part after it fills the second half of
-    // the grain. A reversed grain plays that loud part backwards, ending at the chosen spot; it is moved
-    // later by the length of the loud run so the loud part again fills the second half.
-    int64_t loudRun = 0;
-    if (reverse)
-        for (int64_t s = chosen + 1; s < c.committedSegments && loudRun < halfGrainSegments; ++s, ++loudRun)
-            if (c.energy[(size_t) (s % bufferSegments)] < threshold)
+    const auto candidateStart = [&] {
+        int pick = c.random.below (eligible);
+        int64_t chosen = first;
+        for (int64_t s = first; s < last; ++s)
+            if (c.energy[(size_t) (s % bufferSegments)] >= threshold && pick-- == 0)
+            {
+                chosen = s;
                 break;
-    voice->start = chosen * segmentLength + c.random.below (segmentLength) - grainLength / 2 + loudRun * segmentLength;
+            }
+
+        // A forward grain is centred on the chosen spot, so the loud part after it fills the second half of
+        // the grain. A reversed grain plays that loud part backwards, ending at the chosen spot; it is moved
+        // later by the length of the loud run so the loud part again fills the second half.
+        int64_t loudRun = 0;
+        if (reverse)
+            for (int64_t s = chosen + 1; s < c.committedSegments && loudRun < halfGrainSegments; ++s, ++loudRun)
+                if (c.energy[(size_t) (s % bufferSegments)] < threshold)
+                    break;
+        return chosen * segmentLength + c.random.below (segmentLength) - grainLength / 2 + loudRun * segmentLength;
+    };
+    const auto distanceFor = [&] (int64_t start) {
+        return readDistance (c, reverse ? start + grainLength - 1 : start, reverse, voice);
+    };
+
+    // Smooth mode keeps grains reading apart: a grain reading within kMinReadSpacingSeconds of another one
+    // forms a comb filter with it. Up to kSpacingTries spots are tried; the first far enough (or else the
+    // farthest) wins. (Below 50 % Amount nothing changes, not even the random draws.)
+    int64_t start = candidateStart();
+    if (smoothness > 0.0f)
+    {
+        const double minDistance = kMinReadSpacingSeconds * sampleRate;
+        double best = distanceFor (start);
+        for (int attempt = 1; attempt < kSpacingTries && best < minDistance; ++attempt)
+        {
+            const int64_t other = candidateStart();
+            const double d = distanceFor (other);
+            if (d > best)
+            {
+                best = d;
+                start = other;
+            }
+        }
+    }
+    voice->start = start;
 
     // Detune: a random pitch for this grain, up to +-50 cents x detune (no random draw at 0, so the
     // undetuned cloud stays exactly as it was)
@@ -393,6 +438,8 @@ void FreezeEngine::spawnGrain (Channel& c, float amount)
     }
     const double grainRms = std::sqrt (grainSquares / windowSquares);
     voice->gain = grainRms > 0.0 ? (float) std::clamp (targetRms / grainRms, 0.5, 2.0) : 1.0f;
+    const int64_t firstRead = reverse ? voice->start + grainLength - 1 : voice->start;
+    grainsClose += readDistance (c, firstRead, reverse, voice) < kMinReadSpacingSeconds * sampleRate ? 1 : 0;
     voice->age = 0;
     voice->length = grainLength;
     voice->reverse = reverse;
