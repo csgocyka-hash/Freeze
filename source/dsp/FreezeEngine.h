@@ -19,7 +19,7 @@ constexpr double kSpawnJitter = 0.25;
 // Longest gap between grain starts. Long grains on short plucks would otherwise replay whole
 // plucks with near-silence between them, so long grains overlap more instead.
 constexpr double kMaxSpacingSeconds = 0.040;
-constexpr int kMaxGrains = 48;
+constexpr int kMaxGrains = 64;
 constexpr int kWindowTableSize = 4096;
 constexpr double kSelectSeconds = 1.5;
 constexpr float kSelectThreshold = 0.25f;
@@ -40,8 +40,8 @@ public:
     void setMaxReverseShare (float share);
 
     // How far the cloud turns smooth near full Amount (0..1, default 1). From 50 % to 100 % Amount grains
-    // get up to twice as long, about 16 overlap, and they read from a copy of the input whose note
-    // envelopes (attack and decay) are flattened, so no pluck is left in them.
+    // get up to twice as long, about 24 overlap, and they read from a copy of the input whose note
+    // envelopes (attack and decay) are flattened and whose note starts are faded in, so no pluck is left.
     void setMaxSmoothness (float amount);
 
     // Level of the high-passed spectral freeze layered in parallel with the grains near full Amount,
@@ -82,6 +82,10 @@ private:
         std::vector<float> buffer;    // circular capture buffer, whole segments
         std::vector<float> flat;      // the same audio with its note envelopes flattened (no attack or decay)
         float levelReference = 0.0f;  // slow average of the sounding level, what `flat` is scaled to
+        std::vector<int64_t> segmentTime; // when each buffer segment was recorded (in segments), to find joins
+        float flatEnvelope = 0.0f;    // peak envelope used for flattening (instant attack, 40 ms release)
+        int fadeInRemaining = 0;      // de-click fade-in carried over into the next segment
+        int pendingDip = -1;          // a note start found just past the end of the last flattened segment
         SpectralFreeze spectral;
         float hpState[2][4] {}; // two cascaded high-pass stages (x1, x2, y1, y2) for the spectral layer
         std::vector<float> energy;    // RMS per buffer segment
@@ -92,7 +96,7 @@ private:
         int64_t nextSpawn = 0;
     };
 
-    void commitSegment (Channel& c);
+    void commitSegment (Channel& c, int64_t segmentTime);
     void spawnGrain (Channel& c, float amount);
     float renderGrains (Channel& c);
     int nextSpawnInterval (Channel& c);

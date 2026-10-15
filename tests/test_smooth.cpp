@@ -118,3 +118,30 @@ TEST (spectral_layer_is_off_below_half_amount)
     without.setSpectralLevel (0.0f);
     CHECK (runEngine (withLayer, { in }, a, 512)[0] == runEngine (without, { in }, a, 512)[0]);
 }
+
+TEST (smooth_cloud_on_plucks_has_no_clicks)
+{
+    // A click is a sudden jump: it shows up as a spike in the second difference, which for a smooth
+    // 220 Hz cloud stays tiny (about w^2 = 0.0008 of the signal).
+    auto out = freezeAt (1.0f, pluckTrain (sr, 8.0));
+    const size_t from = (size_t) (2 * sr);
+    double worst = 0.0;
+    for (size_t i = from; i < out.size(); ++i)
+        worst = std::max (worst, (double) std::abs (out[i] - 2.0f * out[i - 1] + out[i - 2]));
+    const double level = rms (out.data() + from, out.size() - from);
+    std::printf ("    worst jump %.5f, level %.4f, ratio %.4f\n", worst, level, worst / level);
+    CHECK (worst < 0.02 * level);
+}
+
+TEST (full_amount_overlaps_24_grains)
+{
+    gf::FreezeEngine e;
+    e.prepare (sr, 512, 1);
+    e.setGrainSeconds (0.25); // x2 at full Amount = 0.5 s, so 24 overlapping means a spawn every ~21 ms
+    auto in = pluckTrain (sr, 4.0);
+    std::vector<float> a (in.size(), 1.0f);
+    runEngine (e, { in }, a, 512);
+    const double perSecond = (double) e.grainsSpawnedCount() / 4.0;
+    std::printf ("    grains per second %.1f (expect ~48)\n", perSecond);
+    CHECK (perSecond > 40.0 && perSecond < 56.0);
+}

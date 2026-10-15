@@ -4,7 +4,7 @@ A granular VST3 effect that turns a rhythm, such as a pluck pattern, into one su
 
 | Control | What it does |
 |---|---|
-| **Amount** (big knob) | Blends from your dry signal (0 %) to the full freeze (100 %). At 0 % the audio passes through untouched. Up to 50 % the freeze is a grain cloud; from 50 % to 100 % the grains get twice as long and about 16 overlap, they read from a copy of the input with each note's attack and decay flattened, and a quiet high-passed spectral layer (20 %) adds a steady shimmer. At 100 % there is no pluck left. |
+| **Amount** (big knob) | Blends from your dry signal (0 %) to the full freeze (100 %). At 0 % the audio passes through untouched. Up to 50 % the freeze is a grain cloud; from 50 % to 100 % the grains get twice as long and about 24 overlap, they read from a copy of the input with each note's attack and decay flattened and every note start faded in (no clicks), and a quiet high-passed spectral layer (20 %) adds a steady shimmer. At 100 % there is no pluck left. |
 | **Grain** | Grain length, from 40 ms (shimmery, textured) to 500 ms (smooth, slow). Near 100 % Amount it also sets how quickly the shimmer layer follows new notes (about 0.3 s to 4 s). |
 | **FX** | Reverb and delay on the frozen sound only. |
 | **Hold** (snowflake, top right) | Freezes the sound playing right now: nothing new is recorded, so the grains keep playing that moment for as long as Hold is on, while new notes pass through dry. Click again to release. |

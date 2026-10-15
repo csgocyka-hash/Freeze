@@ -6,6 +6,7 @@ namespace gf
 namespace
 {
 constexpr double kHalfPi = 1.5707963267948966;
+constexpr float kPi = 3.14159265f;
 constexpr double kTwoPi = 6.283185307179586;
 } // namespace
 
@@ -37,6 +38,7 @@ void FreezeEngine::prepare (double newSampleRate, int /*maxBlockSize*/, int numC
         c.staging.assign ((size_t) segmentLength, 0.0f);
         c.buffer.assign ((size_t) (segmentLength * bufferSegments), 0.0f);
         c.flat.assign (c.buffer.size(), 0.0f);
+        c.segmentTime.assign ((size_t) bufferSegments, 0);
         c.energy.assign ((size_t) bufferSegments, 0.0f);
     }
     reset();
@@ -56,6 +58,9 @@ void FreezeEngine::reset()
         std::fill (c.buffer.begin(), c.buffer.end(), 0.0f);
         std::fill (c.flat.begin(), c.flat.end(), 0.0f);
         c.levelReference = 0.0f;
+        c.flatEnvelope = 0.0f;
+        c.fadeInRemaining = 0;
+        c.pendingDip = -1;
         std::fill (c.energy.begin(), c.energy.end(), 0.0f);
         c.committedSegments = 0;
         for (auto& g : c.grains)
@@ -142,7 +147,7 @@ int64_t FreezeEngine::recordedSamples (int channel) const
     return channelState[(size_t) channel].committedSegments * segmentLength;
 }
 
-void FreezeEngine::commitSegment (Channel& c)
+void FreezeEngine::commitSegment (Channel& c, int64_t segmentTime)
 {
     double sum = 0.0;
     for (float x : c.staging)
@@ -157,6 +162,7 @@ void FreezeEngine::commitSegment (Channel& c)
     const auto slot = (size_t) (c.committedSegments % bufferSegments);
     std::copy (c.staging.begin(), c.staging.end(), c.buffer.begin() + (std::ptrdiff_t) (slot * (size_t) segmentLength));
     c.energy[slot] = segmentRms;
+    c.segmentTime[slot] = segmentTime;
     const float follow = c.committedSegments == 0 ? 1.0f : 0.01f; // ~1 s time constant
     c.levelReference += follow * (segmentRms - c.levelReference);
     ++c.committedSegments;
@@ -168,22 +174,90 @@ void FreezeEngine::commitSegment (Channel& c)
 
 void FreezeEngine::flattenSegment (Channel& c, int64_t segment)
 {
-    // Envelope: segment RMS values interpolated between segment centres; dividing by it removes each
-    // note's attack and decay, leaving its tone at a steady level.
-    auto rmsOf = [&] (int64_t s) {
-        s = std::clamp<int64_t> (s, std::max<int64_t> (0, c.committedSegments - bufferSegments), c.committedSegments - 1);
-        return c.energy[(size_t) (s % bufferSegments)];
-    };
-    const float before = rmsOf (segment - 1), here = rmsOf (segment), after = rmsOf (segment + 1);
+    // Flattening divides the audio by its peak envelope, which removes each note's attack and decay and
+    // leaves its tone at a steady level. The envelope looks 1 ms ahead and attacks instantly, so it is
+    // already up when a note starts (no overshoot). Where the recording jumps (a note start, or a join
+    // where silence was dropped) the copy dips briefly to zero and fades back in, so grains never click.
+    const auto capacity = c.buffer.size();
     const auto base = (size_t) (segment % bufferSegments) * (size_t) segmentLength;
-    const float halfLength = 0.5f * (float) segmentLength;
+    auto sampleAt = [&] (int i) { return c.buffer[(base + (size_t) i) % capacity]; }; // i may run into the next segment
+    const int lookAhead = std::max (1, (int) std::lround (0.001 * sampleRate));
+    const int fadeOut = std::max (1, (int) std::lround (0.002 * sampleRate));
+    const int fadeIn = std::max (1, (int) std::lround (0.004 * sampleRate));
+    const float release = (float) std::exp (-1.0 / (0.040 * sampleRate));
+
+    int dips[8];
+    int numDips = 0;
+    const auto timeOf = [&] (int64_t s) { return c.segmentTime[(size_t) (s % bufferSegments)]; };
+    if (segment > 0 && timeOf (segment) != timeOf (segment - 1) + 1)
+        dips[numDips++] = 0; // silence was dropped before this segment: the recording jumps here
+    if (c.pendingDip >= 0 && numDips < 8)
+        dips[numDips++] = c.pendingDip;
+    c.pendingDip = -1;
+
     for (int i = 0; i < segmentLength; ++i)
     {
-        const float x = (float) i + 0.5f;
-        const float env = x < halfLength ? before + (here - before) * (0.5f + x / (2.0f * halfLength))
-                                         : here + (after - here) * ((x - halfLength) / (2.0f * halfLength));
-        const float gain = std::min (8.0f, c.levelReference / std::max (env, 1.0e-6f));
-        c.flat[base + (size_t) i] = c.buffer[base + (size_t) i] * gain;
+        float peak = 0.0f;
+        int loudest = i;
+        for (int j = i; j <= i + lookAhead; ++j)
+            if (std::abs (sampleAt (j)) > peak)
+            {
+                peak = std::abs (sampleAt (j));
+                loudest = j;
+            }
+
+        // A note start: the level ahead is far above the envelope
+        if (peak > 3.0f * c.flatEnvelope && c.flatEnvelope > 1.0e-5f)
+        {
+            int start = i;
+            while (start < loudest && std::abs (sampleAt (start)) < 2.0f * c.flatEnvelope)
+                ++start;
+            if (start < segmentLength)
+            {
+                if (numDips < 8)
+                    dips[numDips++] = start;
+            }
+            else
+                c.pendingDip = start - segmentLength;
+        }
+
+        c.flatEnvelope = peak > c.flatEnvelope ? peak : peak + (c.flatEnvelope - peak) * release;
+        // levelReference is an RMS level and the envelope a peak level; sqrt 2 converts for tonal material
+        const float gain = std::min (8.0f, 1.4142f * c.levelReference / std::max (c.flatEnvelope, 1.0e-6f));
+        c.flat[base + (size_t) i] = sampleAt (i) * gain;
+    }
+
+    // Fade-in carried over from a dip near the end of the previous segment
+    for (int i = 0; i < c.fadeInRemaining && i < segmentLength; ++i)
+    {
+        const int k = fadeIn - c.fadeInRemaining + i;
+        c.flat[base + (size_t) i] *= 0.5f - 0.5f * std::cos (kPi * (float) k / (float) fadeIn);
+    }
+    c.fadeInRemaining = std::max (0, c.fadeInRemaining - segmentLength);
+
+    // Dips: fade out just before the jump (reaching back into the previous segment if needed), fade in after
+    const bool previousIsContiguous = segment > 0;
+    for (int d = 0; d < numDips; ++d)
+    {
+        const int at = dips[d];
+        for (int k = 1; k <= fadeOut; ++k)
+        {
+            const int i = at - k;
+            if (i < 0 && ! previousIsContiguous)
+                break;
+            const auto index = (base + capacity + (size_t) (std::ptrdiff_t) i) % capacity;
+            c.flat[index] *= 0.5f - 0.5f * std::cos (kPi * (float) k / (float) fadeOut);
+        }
+        for (int k = 0; k < fadeIn; ++k)
+        {
+            const int i = at + k;
+            if (i >= segmentLength)
+            {
+                c.fadeInRemaining = std::max (c.fadeInRemaining, fadeIn - k);
+                break;
+            }
+            c.flat[base + (size_t) i] *= 0.5f - 0.5f * std::cos (kPi * (float) k / (float) fadeIn);
+        }
     }
 }
 
@@ -194,7 +268,7 @@ double FreezeEngine::currentGrainSeconds() const
 
 double FreezeEngine::spacingSeconds() const
 {
-    const double overlap = density + (16.0 - density) * smoothness; // up to ~16 grains overlapping
+    const double overlap = density + (24.0 - density) * smoothness; // up to ~24 grains overlapping
     return std::min (currentGrainSeconds() / overlap, kMaxSpacingSeconds);
 }
 
@@ -355,7 +429,7 @@ void FreezeEngine::process (float* const* channels, int numChannels, int numSamp
         if (++stagingFill == segmentLength)
         {
             for (int ch = 0; ch < numChannels; ++ch)
-                commitSegment (channelState[(size_t) ch]);
+                commitSegment (channelState[(size_t) ch], sampleCounter / segmentLength);
             stagingFill = 0;
         }
 
