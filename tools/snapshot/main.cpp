@@ -1,6 +1,5 @@
 // Renders the plugin window to a PNG, no DAW or audio device needed.
-//   snapshot out.png [amount 0..1] [preset 0..4] [design variant 0..2]
-#include "PluginEditor.h"
+//   snapshot out.png [amount 0..1] [preset 0..4]
 #include "PluginProcessor.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <cstdio>
@@ -24,9 +23,6 @@ int main (int argc, char** argv)
     amount->setValueNotifyingHost (argc > 2 ? (float) std::atof (argv[2]) : 0.6f);
 
     std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
-    if (argc > 4)
-        if (auto* freezeEditor = dynamic_cast<FreezeEditor*> (editor.get()))
-            freezeEditor->setDesignVariant (std::atoi (argv[4]));
     const auto image = editor->createComponentSnapshot (editor->getLocalBounds(), true, 2.0f);
 
     const juce::File file = juce::File::getCurrentWorkingDirectory().getChildFile (argv[1]);
