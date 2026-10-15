@@ -80,6 +80,7 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
         g.setColour (juce::Colours::white);
         g.fillPath (taperedArc (c, ringRadius, startAngle, endAngle, ringStartWidth, sliderPos));
     }
+    if (flat) // the triangle marker is only on the big knob
     {
         juce::Path tri;
         tri.addTriangle (0.0f, -(ringRadius + 0.5f), -triangleSize * 0.62f, -(ringRadius + triangleSize * 1.15f),
@@ -283,9 +284,6 @@ FreezePanel::FreezePanel (FreezeProcessor& p)
     edgeNoise.resize (raw.size());
     for (size_t i = 0; i < raw.size(); ++i)
         edgeNoise[i] = 0.6f * raw[i] + 0.2f * raw[(i + 1) % raw.size()] + 0.2f * raw[(i + raw.size() - 1) % raw.size()];
-    edgeNoiseFine.resize (raw.size() * 2);
-    for (auto& v : edgeNoiseFine)
-        v = rng.nextFloat() * 2.0f - 1.0f;
     for (int i = 0; i < 40; ++i)
     {
         const float a = rng.nextFloat() * juce::MathConstants<float>::twoPi;
@@ -403,11 +401,10 @@ void FreezePanel::applyPresetColours()
     repaint();
 }
 
-juce::Path FreezePanel::splashShape (juce::Point<float> c, float radius, float rough, int seedOffset, float wobbleScale,
-                                     bool fine) const
+juce::Path FreezePanel::splashShape (juce::Point<float> c, float radius, float rough, int seedOffset, float wobbleScale) const
 {
     juce::Path blob;
-    const auto& noiseTable = fine ? edgeNoiseFine : edgeNoise;
+    const auto& noiseTable = edgeNoise;
     const auto n = noiseTable.size();
     const float phase = 1.3f * (float) seedOffset;
     for (size_t i = 0; i <= n; ++i)
@@ -425,55 +422,40 @@ juce::Path FreezePanel::splashShape (juce::Point<float> c, float radius, float r
 
 void FreezePanel::drawSplash (juce::Graphics& g, juce::Point<float> c, float level) const
 {
-    // Three nested splashes: a big pale one, a lighter middle one and the coloured core.
-    // Each layer grows with the amount; the outer layers grow the most, so turning up spreads the splash out.
-    const int style = splashStyle;
-    const bool rims = style == 1 || style == 5, contrast = style == 2 || style == 5, sharp = style == 3, paperCut = style == 4 || style == 5;
-
+    // Three nested splashes like layers of cut paper: a big pale one, a lighter middle one and the coloured
+    // core, each casting a soft shadow on the one below. Each layer grows with the amount; the outer layers
+    // grow the most, so turning up spreads the splash out.
     const float radius = kSplashRadius * (0.8f + 0.2f * level);
-    const float rough = (sharp ? 0.045f : 0.03f) + 0.03f * level;
+    const float rough = 0.03f + 0.03f * level;
     const float wobble = 0.6f;
     const float spread[3] = { 1.08f + 0.72f * level, 1.04f + 0.36f * level, 1.0f };
-    const juce::Colour pale = accentLight.interpolatedWith (juce::Colours::white, contrast ? 0.35f : 0.55f);
+    const juce::Colour pale = accentLight.interpolatedWith (juce::Colours::white, 0.55f);
 
     for (int layer = 0; layer < 3; ++layer)
     {
-        auto blob = splashShape (c, radius * spread[layer], rough * (layer == 2 ? 1.0f : 1.3f), layer, wobble, sharp);
+        auto blob = splashShape (c, radius * spread[layer], rough * (layer == 2 ? 1.0f : 1.3f), layer, wobble);
 
-        if (paperCut && layer > 0) // each layer casts a soft shadow on the one below
+        if (layer > 0)
             juce::DropShadow (accentDeep.withAlpha (layer == 2 ? 0.35f : 0.22f), (int) (radius * 0.09f), { 0, (int) (radius * 0.03f) })
                 .drawForPath (g, blob);
 
         if (layer == 0)
         {
-            g.setColour (pale.withAlpha (contrast ? 0.7f : 0.45f));
+            g.setColour (pale.withAlpha (0.45f));
             g.fillPath (blob);
         }
         else if (layer == 1)
         {
-            g.setGradientFill (juce::ColourGradient (accentLight.withAlpha (contrast ? 0.95f : 0.75f), c.x - radius, c.y - radius,
-                                                     accent.withAlpha (contrast ? 0.85f : 0.6f), c.x + radius * 1.3f, c.y + radius * 1.3f, false));
+            g.setGradientFill (juce::ColourGradient (accentLight.withAlpha (0.75f), c.x - radius, c.y - radius,
+                                                     accent.withAlpha (0.6f), c.x + radius * 1.3f, c.y + radius * 1.3f, false));
             g.fillPath (blob);
         }
         else
         {
-            if (! sharp && ! paperCut)
-                juce::DropShadow (accentDeep.withAlpha (0.35f), (int) (radius * 0.25f), { 0, 3 }).drawForPath (g, blob);
-            juce::ColourGradient fill (contrast ? accent : accentLight, c.x - radius, c.y - radius, accentDeep, c.x + radius, c.y + radius, false);
-            fill.addColour (0.5, contrast ? accent.interpolatedWith (accentDeep, 0.35f) : accent);
+            juce::ColourGradient fill (accentLight, c.x - radius, c.y - radius, accentDeep, c.x + radius, c.y + radius, false);
+            fill.addColour (0.5, accent);
             g.setGradientFill (fill);
             g.fillPath (blob);
-        }
-
-        if (rims) // crisp light edge
-        {
-            g.setColour (juce::Colours::white.withAlpha (layer == 0 ? 0.55f : 0.75f));
-            g.strokePath (blob, juce::PathStrokeType (layer == 2 ? 1.3f : 1.0f));
-        }
-        if (sharp) // a thin darker edge makes the jagged outline read clearly
-        {
-            g.setColour (accentDeep.withAlpha (layer == 0 ? 0.18f : 0.3f));
-            g.strokePath (blob, juce::PathStrokeType (0.7f));
         }
     }
 }
@@ -562,11 +544,12 @@ DetuneControl::DetuneControl() : FillControl ("Detune")
 
 void DetuneControl::drawIcon (juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour)
 {
-    // Fisheye: each line is a single smooth arc - lines above the middle bow up, lines below bow down and
-    // the middle one stays straight, as if seen through a fish-eye lens
-    auto displacement = [] (float x, float y, int) {
-        const float u = (x - 0.5f) / 0.45f, v = y - 0.5f;
-        return 0.24f * v * std::max (0.0f, 1.0f - u * u);
+    // Twist: the stack is warped like a twisted ribbon - top and bottom lines bend opposite ways, with a
+    // gentle second wave running through
+    const float twoPi = juce::MathConstants<float>::twoPi;
+    auto displacement = [twoPi] (float x, float y, int) {
+        const float u = x - 0.5f, v = y - 0.5f;
+        return 0.11f * v * std::sin (twoPi * (u * 1.1f + 0.25f)) - 0.03f * std::sin (twoPi * (u * 2.3f + v));
     };
 
     g.setColour (colour);

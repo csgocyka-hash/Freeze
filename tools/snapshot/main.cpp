@@ -48,11 +48,6 @@ int main (int argc, char** argv)
     for (int i = 2; i < argc; ++i)
         closeup = closeup || juce::String (argv[i]) == "closeup";
 
-    for (int i = 2; i < argc; ++i)
-        if (juce::String (argv[i]).startsWith ("splash="))
-            if (auto* p = dynamic_cast<FreezePanel*> (editor->getChildComponent (0)))
-                p->splashStyle = juce::String (argv[i]).getTrailingIntValue();
-
     // Render the panel at its design size (the window itself opens scaled down), or with "window" the
     // window exactly as it opens (at 2x for a Retina screen)
     bool window = false;

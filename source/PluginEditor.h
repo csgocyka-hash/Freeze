@@ -60,8 +60,8 @@ private:
     std::vector<Dot> dots;
 };
 
-// Bottom right, Detune: thin horizontal lines, each nudged slightly left or right and bowed as if seen through
-// a fish-eye lens
+// Bottom right, Detune: thin horizontal lines, each nudged slightly left or right and warped like a twisted
+// ribbon
 class DetuneControl : public FillControl
 {
 public:
@@ -88,7 +88,6 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
-    int splashStyle = 0; // splash definition variant being chosen (0 = current, 1..5)
 
 private:
     struct Shard
@@ -112,8 +111,7 @@ private:
     void stepPreset (int delta);
     void applyPresetColours();
     void drawSplash (juce::Graphics&, juce::Point<float> centre, float amount) const;
-    juce::Path splashShape (juce::Point<float> centre, float radius, float rough, int seedOffset, float wobbleScale,
-                            bool fine = false) const;
+    juce::Path splashShape (juce::Point<float> centre, float radius, float rough, int seedOffset, float wobbleScale) const;
 
     FreezeProcessor& freezeProcessor;
     FreezeLookAndFeel lookAndFeel;
@@ -126,8 +124,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> holdAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> noiseAttachment, detuneAttachment;
     std::vector<Shard> shards;
-    std::vector<float> edgeNoise;     // -1..1 per edge point of the splash
-    std::vector<float> edgeNoiseFine; // unsmoothed, twice as many points, for a sharper edge
+    std::vector<float> edgeNoise; // -1..1 per edge point of the splash
     int shownPreset = -1;
     juce::Image noise;
     juce::Colour accent, accentLight, accentDeep;
