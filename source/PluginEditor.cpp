@@ -16,7 +16,7 @@ juce::FontOptions uiFont (float height, const juce::String& style)
 const juce::Colour panelTop (0xfff4f5f7), panelBottom (0xffe2e5ea), ink (0xff3b4250), inkSoft (0xff8a92a0);
 
 constexpr int kWidth = 560, kHeight = 400, kHeaderHeight = 40;
-constexpr float kSplashRadius = 96.0f; // 30 % bigger than before
+constexpr float kSplashRadius = 108.0f;
 
 } // namespace
 
@@ -75,60 +75,102 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
     }
 
     // ---- Knob ----
-    const float wall = juce::jmax (1.5f, knobRadius * 0.07f); // visible side wall below the face
+    const float wall = juce::jmax (1.5f, knobRadius * 0.09f); // visible side wall below the face
     const auto face = juce::Rectangle<float> (knobRadius * 2.0f, knobRadius * 2.0f).withCentre (c);
     const auto base = face.translated (0.0f, wall);
     juce::Path body;
     body.addEllipse (base);
 
-    // Shadows: wide soft ambient shadow and a tight contact shadow
-    juce::DropShadow (juce::Colour (0x55101828), (int) (knobRadius * 0.7f), { (int) (knobRadius * 0.1f), (int) (knobRadius * 0.28f) })
+    // Shadows: wide soft ambient shadow, a mid shadow and a tight contact shadow (ambient occlusion)
+    juce::DropShadow (juce::Colour (0x40101828), (int) (knobRadius * 0.9f), { (int) (knobRadius * 0.12f), (int) (knobRadius * 0.38f) })
         .drawForPath (g, body);
-    juce::DropShadow (juce::Colour (0x66101828), (int) juce::jmax (2.0f, knobRadius * 0.1f), { 0, (int) juce::jmax (1.0f, knobRadius * 0.04f) })
+    juce::DropShadow (juce::Colour (0x50101828), (int) (knobRadius * 0.35f), { (int) (knobRadius * 0.05f), (int) (knobRadius * 0.14f) })
+        .drawForPath (g, body);
+    juce::DropShadow (juce::Colour (0x80101828), (int) juce::jmax (2.0f, knobRadius * 0.06f), { 0, (int) juce::jmax (1.0f, knobRadius * 0.03f) })
         .drawForPath (g, body);
 
-    // Side wall: slightly darker satin band, lighter on the left where the light comes from
-    juce::Path side;
-    side.addRectangle (face.getX(), c.y, face.getWidth(), wall);
-    side.addEllipse (base);
-    juce::ColourGradient wallFill (juce::Colour (0xffc9ccd1), face.getX(), 0.0f, juce::Colour (0xff9da2a9), face.getRight(), 0.0f, false);
-    wallFill.addColour (0.3, juce::Colour (0xffe3e5e8));
-    g.setGradientFill (wallFill);
-    g.fillPath (side);
+    // Side wall: satin band with fine vertical grip lines, lit from the left
+    {
+        juce::Path side;
+        side.addRectangle (face.getX(), c.y, face.getWidth(), wall);
+        side.addEllipse (base);
+        juce::ColourGradient wallFill (juce::Colour (0xffb9bdc3), face.getX(), 0.0f, juce::Colour (0xff8e939b), face.getRight(), 0.0f, false);
+        wallFill.addColour (0.22, juce::Colour (0xffe9ebee));
+        wallFill.addColour (0.5, juce::Colour (0xffc9ccd1));
+        g.setGradientFill (wallFill);
+        g.fillPath (side);
+
+        juce::Graphics::ScopedSaveState clipToWall (g);
+        g.reduceClipRegion (side);
+        const int grips = juce::jmax (24, (int) (knobRadius * 1.6f));
+        for (int i = 0; i < grips; ++i)
+        {
+            // Lines spaced evenly around the visible half of the cylinder
+            const float t = juce::MathConstants<float>::pi * ((float) i + 0.5f) / (float) grips;
+            const float gx = c.x - std::cos (t) * knobRadius;
+            g.setColour (juce::Colours::black.withAlpha (0.07f));
+            g.drawVerticalLine ((int) gx, c.y, c.y + wall + knobRadius);
+        }
+    }
 
     // Face: satin light grey, lit from the top left
-    juce::ColourGradient faceFill (juce::Colour (0xfff1f2f4), face.getX() + knobRadius * 0.3f, face.getY(),
-                                   juce::Colour (0xffcfd2d6), face.getRight() - knobRadius * 0.3f, face.getBottom(), false);
-    faceFill.addColour (0.5, juce::Colour (0xffe1e3e6));
+    juce::ColourGradient faceFill (juce::Colour (0xfff4f5f7), face.getX() + knobRadius * 0.3f, face.getY(),
+                                   juce::Colour (0xffcdd0d5), face.getRight() - knobRadius * 0.3f, face.getBottom(), false);
+    faceFill.addColour (0.5, juce::Colour (0xffe2e4e7));
     g.setGradientFill (faceFill);
     g.fillEllipse (face);
 
-    // Spun finish: very faint concentric rings with slightly varying brightness, like turned aluminium
+    // Brushed spin highlight: two soft bright sectors across the face, like light on turned aluminium
+    {
+        constexpr int sectors = 180;
+        for (int i = 0; i < sectors; ++i)
+        {
+            const float a0 = juce::MathConstants<float>::twoPi * (float) i / sectors;
+            const float a1 = juce::MathConstants<float>::twoPi * (float) (i + 1) / sectors;
+            const float sheen = std::pow (0.5f + 0.5f * std::cos (2.0f * (0.5f * (a0 + a1) + 0.55f)), 3.0f);
+            juce::Path wedge;
+            wedge.addPieSegment (face, a0, a1 + 0.004f, 0.0f);
+            g.setColour (juce::Colours::white.withAlpha (0.22f * sheen));
+            g.fillPath (wedge);
+        }
+    }
+
+    // Spun finish: very faint concentric rings with slightly varying brightness
     {
         juce::Random grain (7);
-        const float step = juce::jmax (0.9f, knobRadius * 0.018f);
-        for (float r = knobRadius * 0.1f; r < knobRadius * 0.97f; r += step)
+        const float step = juce::jmax (0.8f, knobRadius * 0.016f);
+        for (float r = knobRadius * 0.08f; r < knobRadius * 0.97f; r += step)
         {
             const float v = grain.nextFloat();
-            g.setColour ((v > 0.5f ? juce::Colours::white : juce::Colours::black).withAlpha (0.018f * std::abs (v - 0.5f) * 2.0f));
+            g.setColour ((v > 0.5f ? juce::Colours::white : juce::Colours::black).withAlpha (0.02f * std::abs (v - 0.5f) * 2.0f));
             g.drawEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c), step * 0.6f);
         }
     }
 
-    // Soft broad sheen across the upper left of the face
-    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.55f), c.x - knobRadius * 0.45f, c.y - knobRadius * 0.55f,
-                                             juce::Colours::white.withAlpha (0.0f), c.x + knobRadius * 0.2f, c.y + knobRadius * 0.3f, true));
+    // Slightly concave face: a soft darker band just inside the rim
+    g.setGradientFill (juce::ColourGradient (juce::Colours::black.withAlpha (0.0f), c.x, c.y,
+                                             juce::Colours::black.withAlpha (0.08f), c.x + knobRadius, c.y, true));
     g.fillEllipse (face);
 
-    // Chamfered edge: crisp highlight on top, darker on the bottom
+    // Chamfered edge: crisp highlight on top, darker on the bottom, plus a hairline dark outline
     g.setGradientFill (juce::ColourGradient (juce::Colours::white, c.x, face.getY(),
-                                             juce::Colour (0x55000000), c.x, face.getBottom(), false));
-    g.drawEllipse (face.reduced (0.5f), juce::jmax (1.0f, knobRadius * 0.035f));
+                                             juce::Colour (0x40000000), c.x, face.getBottom(), false));
+    g.drawEllipse (face.reduced (juce::jmax (0.6f, knobRadius * 0.02f)), juce::jmax (1.0f, knobRadius * 0.04f));
+    g.setColour (juce::Colour (0x38000000));
+    g.drawEllipse (face, 0.6f);
+
+    // Centre cap: tiny polished dimple
+    {
+        const auto dimple = juce::Rectangle<float> (knobRadius * 0.16f, knobRadius * 0.16f).withCentre (c);
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xffc9ccd1), dimple.getX(), dimple.getY(),
+                                                 juce::Colours::white, dimple.getRight(), dimple.getBottom(), false));
+        g.fillEllipse (dimple);
+    }
 
     // Super-thin black pointer line, set into the face (light lower edge)
     juce::Path pointer;
-    pointer.startNewSubPath (c.getPointOnCircumference (knobRadius * 0.12f, angle));
-    pointer.lineTo (c.getPointOnCircumference (knobRadius * 0.84f, angle));
+    pointer.startNewSubPath (c.getPointOnCircumference (knobRadius * 0.16f, angle));
+    pointer.lineTo (c.getPointOnCircumference (knobRadius * 0.86f, angle));
     const juce::PathStrokeType stroke (juce::jmax (0.8f, knobRadius * 0.022f), juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
     g.setColour (juce::Colours::white.withAlpha (0.8f));
     g.strokePath (pointer, stroke, juce::AffineTransform::translation (0.0f, 0.5f));
@@ -262,7 +304,7 @@ void FreezeEditor::applyPresetColours()
     presetName.setColour (juce::Label::textColourId, ink);
     for (auto* knob : { &grain, &fx })
         knob->label.setColour (juce::Label::textColourId, accentDeep);
-    amount.label.setColour (juce::Label::textColourId, juce::Colours::white); // sits on the splash
+    amount.label.setVisible (false); // the big knob needs no caption
     repaint();
 }
 
@@ -315,18 +357,6 @@ void FreezeEditor::drawSplash (juce::Graphics& g, juce::Point<float> c, float le
             g.setGradientFill (fill);
             g.fillPath (blob);
         }
-    }
-
-    // Icy specks breaking off the edge as the amount rises
-    for (const auto& s : shards)
-    {
-        const float visible = juce::jlimit (0.0f, 1.0f, (level * 1.3f - s.reach * 0.9f) * 2.0f);
-        if (visible <= 0.0f)
-            continue;
-        auto shape = s.shape;
-        shape.applyTransform (juce::AffineTransform::scale (1.6f + 0.1f * level * s.reach).translated (c));
-        g.setColour (accent.interpolatedWith (accentLight, s.reach).withAlpha (s.alpha * visible * 0.6f));
-        g.fillPath (shape);
     }
 }
 
