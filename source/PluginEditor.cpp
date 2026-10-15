@@ -209,10 +209,29 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
     pointer.startNewSubPath (c.getPointOnCircumference (knobRadius * 0.16f, angle));
     pointer.lineTo (c.getPointOnCircumference (knobRadius * 0.86f, angle));
     const juce::PathStrokeType stroke (juce::jmax (0.8f, knobRadius * 0.022f), juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
-    g.setColour (juce::Colours::white.withAlpha (0.8f));
-    g.strokePath (pointer, stroke, juce::AffineTransform::translation (0.0f, 0.5f));
-    g.setColour (flat ? juce::Colour (0xffa7acb4) : juce::Colour (0xff111214)); // light grey on the big knob
-    g.strokePath (pointer, stroke);
+    if (! flat)
+    {
+        g.setColour (juce::Colours::white.withAlpha (0.8f));
+        g.strokePath (pointer, stroke, juce::AffineTransform::translation (0.0f, 0.5f));
+    }
+    if (flat)
+    {
+        // Big knob: a light grey needle that tapers to a sharp point at its outer end
+        const auto base = c.getPointOnCircumference (knobRadius * 0.16f, angle);
+        const auto tip = c.getPointOnCircumference (knobRadius * 0.86f, angle);
+        const auto side = juce::Point<float> (std::cos (angle), std::sin (angle)) * (juce::jmax (1.0f, knobRadius * 0.03f));
+        juce::Path needle;
+        needle.addTriangle (base + side, base - side, tip);
+        g.setColour (juce::Colours::white.withAlpha (0.8f));
+        g.fillPath (needle, juce::AffineTransform::translation (0.0f, 0.5f));
+        g.setColour (juce::Colour (0xffa7acb4));
+        g.fillPath (needle);
+    }
+    else
+    {
+        g.setColour (juce::Colour (0xff111214));
+        g.strokePath (pointer, stroke);
+    }
 }
 
 FreezeEditor::FreezeEditor (FreezeProcessor& p)
