@@ -81,7 +81,7 @@ private:
 class FreezePanel : public juce::Component, private juce::Timer
 {
 public:
-    static constexpr int designWidth = 560, designHeight = 400;
+    static constexpr int designWidth = 440, designHeight = 400; // compact
 
     explicit FreezePanel (FreezeProcessor&);
     ~FreezePanel() override;

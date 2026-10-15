@@ -636,7 +636,8 @@ void FreezePanel::paint (juce::Graphics& g)
 void FreezePanel::resized()
 {
     const auto centreX = getWidth() / 2;
-    presetName.setBounds (juce::Rectangle<int> (140, 24).withCentre ({ centreX, 20 }));
+    // The preset selector sits between the wordmark and the snowflake
+    presetName.setBounds (juce::Rectangle<int> (100, 24).withCentre ({ (212 + getWidth() - 48) / 2, 20 }));
     previous.setBounds (presetName.getX() - 28, 8, 26, 24);
     next.setBounds (presetName.getRight() + 2, 8, 26, 24);
     snowflake.setBounds (getWidth() - 48, 0, 40, 40);

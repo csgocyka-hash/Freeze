@@ -14,7 +14,7 @@ A granular VST3 effect that turns a rhythm, such as a pluck pattern, into one su
 
 The freeze keeps holding after you stop playing, as long as Amount is up.
 
-The window opens small (392 × 280) and can be resized from its edges between 280 × 200 and 840 × 600, keeping its proportions; the size is saved with your project.
+The window opens small (308 × 280) and can be resized from its edges between 220 × 200 and 660 × 600, keeping its proportions; the size is saved with your project.
 
 ## Build on macOS (no admin needed)
 

@@ -326,7 +326,7 @@ TEST (editor_opens_small_and_scales)
     FreezeProcessor p;
     std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
     auto& panel = panelOf (*editor);
-    CHECK (editor->getWidth() == 392 && editor->getHeight() == 280); // opens at 70 %, small on screen
+    CHECK (editor->getWidth() == 308 && editor->getHeight() == 280); // compact layout at 70 %, small on screen
     CHECK (editor->isResizable());
     // The panel keeps its design size and is scaled to fill the window
     const auto shown = panel.getBoundsInParent();
