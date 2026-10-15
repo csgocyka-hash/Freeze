@@ -616,15 +616,15 @@ void FreezePanel::paint (juce::Graphics& g)
 
     // Letter-spaced wordmark
     juce::GlyphArrangement word;
-    word.addLineOfText (uiFont (19.0f, "Ultra Light"), "FREEZE", 18.0f, 24.0f);
+    word.addLineOfText (uiFont (16.0f, "Ultra Light"), "FREEZE", 16.0f, 23.0f);
     for (int i = 0; i < word.getNumGlyphs(); ++i)
-        word.moveRangeOfGlyphs (i, 1, 5.0f * (float) i, 0.0f);
+        word.moveRangeOfGlyphs (i, 1, 3.5f * (float) i, 0.0f);
     g.setColour (ink);
     word.draw (g);
 
     // Maker line, very small under the wordmark
     juce::GlyphArrangement maker;
-    maker.addLineOfText (uiFont (7.5f, "Medium").withKerningFactor (0.2f), "by fouren", 19.0f, 35.0f);
+    maker.addLineOfText (uiFont (7.5f, "Medium").withKerningFactor (0.2f), "by fouren", 17.0f, 34.0f);
     g.setColour (inkSoft);
     maker.draw (g);
 
@@ -635,11 +635,11 @@ void FreezePanel::paint (juce::Graphics& g)
 void FreezePanel::resized()
 {
     const auto centreX = getWidth() / 2;
-    logo.setBounds (12, 4, 200, 34); // over the FREEZE wordmark and "by fouren"
-    // The preset selector sits between the wordmark and the snowflake
-    presetName.setBounds (juce::Rectangle<int> (100, 24).withCentre ({ (212 + getWidth() - 48) / 2, 20 }));
-    previous.setBounds (presetName.getX() - 28, 8, 26, 24);
-    next.setBounds (presetName.getRight() + 2, 8, 26, 24);
+    logo.setBounds (10, 4, 150, 34); // over the FREEZE wordmark and "by fouren"
+    // The preset selector sits in the middle of the top bar, arrows tight around the name
+    presetName.setBounds (juce::Rectangle<int> (92, 24).withCentre ({ centreX, 20 }));
+    previous.setBounds (presetName.getX() - 22, 8, 22, 24);
+    next.setBounds (presetName.getRight(), 8, 22, 24);
     snowflake.setBounds (getWidth() - 48, 0, 40, 40);
     noiseControl.setBounds (8, getHeight() - 54, 46, 46); // bottom-left corner, opposite the snowflake
     detuneControl.setBounds (getWidth() - 54, getHeight() - 54, 46, 46); // bottom-right corner
