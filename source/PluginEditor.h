@@ -29,6 +29,24 @@ public:
     juce::Colour accent { 0xff4f9dff }, accentLight { 0xffa8e0ff };
 };
 
+// Bottom-left button: a halftone dot pattern that reads as noise. Toggles Snowfall (clean, swept noise that
+// follows Amount). Grey when off, lit in the preset colour when on.
+class SnowfallButton : public juce::Button
+{
+public:
+    SnowfallButton();
+    void paintButton (juce::Graphics&, bool isHighlighted, bool isDown) override;
+
+    juce::Colour accent { 0xff4f9dff }, accentLight { 0xffa8e0ff };
+
+private:
+    struct Dot
+    {
+        float x, y, radius; // in a unit square
+    };
+    std::vector<Dot> dots;
+};
+
 // Wide panel: wordmark and preset selector on top, the big Amount knob in the middle over an ice splash
 // that shatters as the amount rises, and the small Grain and FX knobs underneath. Colours follow the preset.
 class FreezeEditor : public juce::AudioProcessorEditor, private juce::Timer
@@ -79,7 +97,8 @@ private:
     juce::TextButton previous { juce::CharPointer_UTF8 ("\xe2\x80\xb9") }, next { juce::CharPointer_UTF8 ("\xe2\x80\xba") };
     juce::Label presetName;
     SnowflakeButton snowflake;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> holdAttachment;
+    SnowfallButton snowfall;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> holdAttachment, snowAttachment;
     std::vector<Shard> shards;
     std::vector<float> edgeNoise; // -1..1 per edge point of the splash
     int shownPreset = -1;

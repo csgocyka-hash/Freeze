@@ -13,6 +13,7 @@ FreezeProcessor::FreezeProcessor()
     fxParam = apvts.getRawParameterValue ("fx");
     presetParam = apvts.getRawParameterValue ("preset");
     holdParam = apvts.getRawParameterValue ("hold");
+    snowParam = apvts.getRawParameterValue ("snow");
     apvts.addParameterListener ("preset", this);
 }
 
@@ -97,6 +98,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout FreezeProcessor::createLayou
         juce::AudioParameterFloatAttributes().withStringFromValueFunction (percent)));
     layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "preset", 1 }, "Preset", presetNames, 0));
     layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "hold", 1 }, "Hold", false));
+    layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "snow", 1 }, "Snowfall", false));
     return layout;
 }
 
@@ -111,6 +113,8 @@ void FreezeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     preparedBlockSize = juce::jmax (1, samplesPerBlock);
     engine.prepare (sampleRate, preparedBlockSize, juce::jmax (1, getTotalNumOutputChannels()));
+    snowfall.prepare (sampleRate, juce::jmax (1, getTotalNumOutputChannels()));
+    snowfall.setEnabled (snowParam->load() > 0.5f, true);
     amountBuffer.assign ((size_t) preparedBlockSize, 0.0f);
     fxBuffer.assign ((size_t) preparedBlockSize, 0.0f);
     freezeSmoothed.reset (sampleRate, 0.05);
@@ -131,6 +135,7 @@ void FreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     fxSmoothed.setTargetValue (fxParam->load());
     engine.setGrainSeconds (gf::grainKnobToSeconds (grainParam->load()));
     engine.setHold (holdParam->load() > 0.5f);
+    snowfall.setEnabled (snowParam->load() > 0.5f, false);
     if (const int index = currentPreset(); index != appliedPreset)
     {
         engine.setDensity (gf::preset (index).density);
@@ -153,6 +158,7 @@ void FreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         for (int ch = 0; ch < juce::jmin (numChannels, 2); ++ch)
             channels[ch] = buffer.getWritePointer (ch, pos);
         engine.process (channels, juce::jmin (numChannels, 2), n, amountBuffer.data(), fxBuffer.data());
+        snowfall.process (channels, juce::jmin (numChannels, 2), n, amountBuffer.data()); // clean noise on top
     }
 }
 

@@ -1,11 +1,12 @@
 // Offline renderer: hear Freeze without a DAW.
 //
 //   render [--test-pluck | --in file.wav] [--preset Name | --all] [--freeze 0..1 | --sweep]
-//          [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--reverse 0..1] [--out file.wav]
+//          [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--reverse 0..1] [--snow] [--out file.wav]
 //
 // Writes "00 Dry.wav" next to the output for comparison. --all writes one file per preset.
 #include "dsp/FreezeEngine.h"
 #include "dsp/Presets.h"
+#include "dsp/Snowfall.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <cstdio>
 #include <cstring>
@@ -81,6 +82,7 @@ struct Settings
     float grain = -1.0f, fx = -1.0f; // -1: use the preset's starting value
     double holdAt = -1.0;           // seconds; switch Hold on from this point (-1: never)
     float reverse = 0.5f;           // share of reversed grains at full Amount
+    bool snow = false;              // add Snowfall noise
 };
 
 juce::AudioBuffer<float> render (const juce::AudioBuffer<float>& dry, double sampleRate, const Settings& s)
@@ -95,6 +97,10 @@ juce::AudioBuffer<float> render (const juce::AudioBuffer<float>& dry, double sam
     engine.setGrainSeconds (s.grain >= 0.0f ? gf::grainKnobToSeconds (s.grain) : preset.grainSeconds);
     const float fx = s.fx >= 0.0f ? s.fx : preset.fx;
 
+    gf::Snowfall snowfall;
+    snowfall.prepare (sampleRate, 2);
+    snowfall.setEnabled (s.snow, true);
+
     auto out = dry;
     const int length = out.getNumSamples();
     std::vector<float> amount (512), fxAmount (512, fx);
@@ -106,6 +112,7 @@ juce::AudioBuffer<float> render (const juce::AudioBuffer<float>& dry, double sam
         engine.setHold (s.holdAt >= 0.0 && pos >= (int) (s.holdAt * sampleRate));
         float* channels[2] = { out.getWritePointer (0, pos), out.getWritePointer (1, pos) };
         engine.process (channels, 2, n, amount.data(), fxAmount.data());
+        snowfall.process (channels, 2, n, amount.data());
     }
     return out;
 }
@@ -144,6 +151,7 @@ int main (int argc, char** argv)
         else if (arg == "--sweep") settings.sweep = true;
         else if (arg == "--hold-at" && hasValue) settings.holdAt = std::atof (argv[++i]);
         else if (arg == "--reverse" && hasValue) settings.reverse = (float) std::atof (argv[++i]);
+        else if (arg == "--snow") settings.snow = true;
         else if (arg == "--all") all = true;
         else if (arg == "--test-pluck") inPath = {};
         else if (arg == "--preset" && hasValue)
@@ -158,7 +166,7 @@ int main (int argc, char** argv)
         else
         {
             std::fprintf (stderr, "Usage: render [--test-pluck | --in file.wav] [--preset Name | --all] "
-                                  "[--freeze 0..1 | --sweep] [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--reverse 0..1] [--out file.wav]\n");
+                                  "[--freeze 0..1 | --sweep] [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--reverse 0..1] [--snow] [--out file.wav]\n");
             return 1;
         }
     }

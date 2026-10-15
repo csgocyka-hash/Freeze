@@ -211,7 +211,7 @@ void FreezeLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
     const juce::PathStrokeType stroke (juce::jmax (0.8f, knobRadius * 0.022f), juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
     g.setColour (juce::Colours::white.withAlpha (0.8f));
     g.strokePath (pointer, stroke, juce::AffineTransform::translation (0.0f, 0.5f));
-    g.setColour (juce::Colour (0xff111214));
+    g.setColour (flat ? juce::Colour (0xffa7acb4) : juce::Colour (0xff111214)); // light grey on the big knob
     g.strokePath (pointer, stroke);
 }
 
@@ -242,6 +242,8 @@ FreezeEditor::FreezeEditor (FreezeProcessor& p)
 
     holdAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (freezeProcessor.apvts, "hold", snowflake);
     addAndMakeVisible (snowflake);
+    snowAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (freezeProcessor.apvts, "snow", snowfall);
+    addAndMakeVisible (snowfall);
 
     // Shards scattered around the hexagon edge; fixed seed so the splash always looks the same.
     juce::Random rng (2026);
@@ -354,6 +356,9 @@ void FreezeEditor::applyPresetColours()
     snowflake.accent = accent;
     snowflake.accentLight = accentLight;
     snowflake.repaint();
+    snowfall.accent = accent;
+    snowfall.accentLight = accentLight;
+    snowfall.repaint();
 
     presetName.setText (labelText (preset.name), juce::dontSendNotification);
     presetName.setColour (juce::Label::textColourId, ink);
@@ -416,10 +421,50 @@ void FreezeEditor::drawSplash (juce::Graphics& g, juce::Point<float> c, float le
     }
 }
 
+SnowfallButton::SnowfallButton() : juce::Button ("Snowfall")
+{
+    setClickingTogglesState (true);
+    setTooltip ("Snowfall: clean, airy noise that follows and sweeps with the big knob");
+
+    // Halftone fade: a round dot grid whose dots shrink towards the edge, like dithered noise
+    for (int row = -6; row <= 6; ++row)
+        for (int col = -6; col <= 6; ++col)
+        {
+            const float x = 0.075f * (float) col, y = 0.075f * (float) row;
+            const float r = std::sqrt (x * x + y * y) / 0.47f;
+            if (r > 1.0f)
+                continue;
+            dots.push_back ({ 0.5f + x, 0.5f + y, 0.024f * (1.0f - 0.75f * r) });
+        }
+}
+
+void SnowfallButton::paintButton (juce::Graphics& g, bool isHighlighted, bool isDown)
+{
+    const auto area = getLocalBounds().toFloat().reduced (1.0f);
+    const bool on = getToggleState();
+    if (on)
+    {
+        const auto c = area.getCentre();
+        const auto glow = getLocalBounds().toFloat();
+        g.setGradientFill (juce::ColourGradient (accentLight.withAlpha (0.7f), c.x, c.y,
+                                                 accentLight.withAlpha (0.0f), c.x + glow.getWidth() * 0.5f, c.y, true));
+        g.fillEllipse (glow);
+    }
+    auto colour = on ? accent : inkSoft;
+    if (isHighlighted || isDown)
+        colour = colour.interpolatedWith (on ? accent.darker (0.3f) : ink, 0.5f);
+    for (const auto& d : dots)
+    {
+        const float r = d.radius * area.getWidth();
+        g.setColour (colour);
+        g.fillEllipse (area.getX() + d.x * area.getWidth() - r, area.getY() + d.y * area.getHeight() - r, 2.0f * r, 2.0f * r);
+    }
+}
+
 void SnowflakeButton::paintButton (juce::Graphics& g, bool isHighlighted, bool isDown)
 {
     const auto c = getLocalBounds().toFloat().getCentre();
-    const float r = juce::jmin (getWidth(), getHeight()) * 0.5f - 4.0f;
+    const float r = (juce::jmin (getWidth(), getHeight()) * 0.5f - 4.0f) * 0.75f;
     const bool on = getToggleState();
 
     if (on)
@@ -485,6 +530,7 @@ void FreezeEditor::resized()
     previous.setBounds (presetName.getX() - 28, 8, 26, 24);
     next.setBounds (presetName.getRight() + 2, 8, 26, 24);
     snowflake.setBounds (getWidth() - 48, 0, 40, 40);
+    snowfall.setBounds (8, getHeight() - 48, 40, 40); // mirrors the snowflake in the top right
 
     // Big Amount knob in the middle, Grain and FX side by side underneath it
     // Width sets the knob size; the extra height is room for the shadow

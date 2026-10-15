@@ -260,3 +260,23 @@ TEST (snowflake_button_toggles_hold)
     snowflake->setToggleState (true, juce::sendNotificationSync); // same path as a user click
     CHECK (p.apvts.getRawParameterValue ("hold")->load() > 0.5f);
 }
+
+TEST (snowfall_parameter_and_button)
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FreezeProcessor p;
+    auto* snowParam = dynamic_cast<juce::AudioParameterBool*> (p.apvts.getParameter ("snow"));
+    CHECK (snowParam != nullptr);
+    if (snowParam == nullptr)
+        return;
+    CHECK (! snowParam->get());
+    std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
+    juce::Button* button = nullptr;
+    for (auto* child : editor->getChildren())
+        if (auto* b = dynamic_cast<juce::Button*> (child); b != nullptr && b->getName() == "Snowfall")
+            button = b;
+    CHECK (button != nullptr);
+    if (button != nullptr)
+        button->setToggleState (true, juce::sendNotificationSync);
+    CHECK (snowParam->get());
+}

@@ -1,5 +1,6 @@
 #pragma once
 #include "dsp/FreezeEngine.h"
+#include "dsp/Snowfall.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <vector>
 
@@ -47,6 +48,7 @@ private:
     void setParameterValue (const char* id, float value);
 
     gf::FreezeEngine engine;
+    gf::Snowfall snowfall;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> freezeSmoothed, fxSmoothed;
     std::vector<float> amountBuffer, fxBuffer;
     std::atomic<float>* freezeParam = nullptr;
@@ -54,6 +56,7 @@ private:
     std::atomic<float>* fxParam = nullptr;
     std::atomic<float>* presetParam = nullptr;
     std::atomic<float>* holdParam = nullptr;
+    std::atomic<float>* snowParam = nullptr;
     int appliedPreset = -1;               // audio thread: preset whose density/FX the engine uses
     std::atomic<int> pendingPreset { -1 }; // preset whose starting values still need applying
     bool restoringState = false;
