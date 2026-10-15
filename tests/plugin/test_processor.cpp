@@ -189,13 +189,13 @@ TEST (editor_has_three_knobs)
     int sliders = 0;
     for (auto* child : editor->getChildren())
         sliders += dynamic_cast<juce::Slider*> (child) != nullptr ? 1 : 0;
-    CHECK (sliders == 3);
+    CHECK (sliders == 4); // Amount, Grain, FX and the Noise drag control
 
     // Big Amount knob in the middle, the two small knobs below it
     juce::Slider* knobs[3] {};
     int n = 0;
     for (auto* child : editor->getChildren())
-        if (auto* s = dynamic_cast<juce::Slider*> (child))
+        if (auto* s = dynamic_cast<juce::Slider*> (child); s != nullptr && s->getName() != "Noise" && n < 3)
             knobs[n++] = s;
     std::sort (std::begin (knobs), std::end (knobs), [] (auto* a, auto* b) { return a->getWidth() > b->getWidth(); });
     CHECK (std::abs (knobs[0]->getBounds().getCentreX() - editor->getWidth() / 2) <= 1);
@@ -263,23 +263,27 @@ TEST (snowflake_button_toggles_hold)
     CHECK (p.apvts.getRawParameterValue ("hold")->load() > 0.5f);
 }
 
-TEST (noise_parameter_and_button)
+TEST (noise_parameter_and_drag_control)
 {
     juce::ScopedJuceInitialiser_GUI gui;
     FreezeProcessor p;
-    auto* snowParam = dynamic_cast<juce::AudioParameterBool*> (p.apvts.getParameter ("noise"));
-    CHECK (snowParam != nullptr);
-    if (snowParam == nullptr)
+    auto* noise = dynamic_cast<juce::AudioParameterFloat*> (p.apvts.getParameter ("noise"));
+    CHECK (noise != nullptr);
+    if (noise == nullptr)
         return;
-    CHECK (! snowParam->get());
-    CHECK (snowParam->getName (20) == "Noise");
+    CHECK_NEAR (noise->get(), 0.0, 1e-6);
+    CHECK (noise->getName (20) == "Noise");
+    CHECK (p.apvts.getParameter ("noise")->getText (0.4f, 10) == "40 %");
+
     std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
-    juce::Button* button = nullptr;
+    juce::Slider* control = nullptr;
     for (auto* child : editor->getChildren())
-        if (auto* b = dynamic_cast<juce::Button*> (child); b != nullptr && b->getName() == "Noise")
-            button = b;
-    CHECK (button != nullptr);
-    if (button != nullptr)
-        button->setToggleState (true, juce::sendNotificationSync);
-    CHECK (snowParam->get());
+        if (auto* s = dynamic_cast<juce::Slider*> (child); s != nullptr && s->getName() == "Noise")
+            control = s;
+    CHECK (control != nullptr);
+    if (control == nullptr)
+        return;
+    CHECK (control->getSliderStyle() == juce::Slider::RotaryVerticalDrag || control->getSliderStyle() == juce::Slider::LinearVertical);
+    control->setValue (0.7, juce::sendNotificationSync);
+    CHECK_NEAR (noise->get(), 0.7, 1e-3);
 }

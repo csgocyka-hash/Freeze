@@ -98,7 +98,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout FreezeProcessor::createLayou
         juce::AudioParameterFloatAttributes().withStringFromValueFunction (percent)));
     layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "preset", 1 }, "Preset", presetNames, 0));
     layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "hold", 1 }, "Freeze", false)); // the snowflake
-    layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "noise", 1 }, "Noise", false)); // the dot button
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "noise", 1 }, "Noise", juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f,
+        juce::AudioParameterFloatAttributes().withStringFromValueFunction (percent))); // the dot control
     return layout;
 }
 
@@ -114,7 +116,9 @@ void FreezeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     preparedBlockSize = juce::jmax (1, samplesPerBlock);
     engine.prepare (sampleRate, preparedBlockSize, juce::jmax (1, getTotalNumOutputChannels()));
     snowfall.prepare (sampleRate, juce::jmax (1, getTotalNumOutputChannels()));
-    snowfall.setEnabled (snowParam->load() > 0.5f, true);
+    noiseBuffer.assign ((size_t) preparedBlockSize, 0.0f);
+    noiseSmoothed.reset (sampleRate, 0.05);
+    noiseSmoothed.setCurrentAndTargetValue (snowParam->load());
     amountBuffer.assign ((size_t) preparedBlockSize, 0.0f);
     fxBuffer.assign ((size_t) preparedBlockSize, 0.0f);
     freezeSmoothed.reset (sampleRate, 0.05);
@@ -135,7 +139,7 @@ void FreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     fxSmoothed.setTargetValue (fxParam->load());
     engine.setGrainSeconds (gf::grainKnobToSeconds (grainParam->load()));
     engine.setHold (holdParam->load() > 0.5f);
-    snowfall.setEnabled (snowParam->load() > 0.5f, false);
+    noiseSmoothed.setTargetValue (snowParam->load());
     if (const int index = currentPreset(); index != appliedPreset)
     {
         engine.setDensity (gf::preset (index).density);
@@ -152,13 +156,14 @@ void FreezeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         {
             amountBuffer[(size_t) i] = freezeSmoothed.getNextValue();
             fxBuffer[(size_t) i] = fxSmoothed.getNextValue();
+            noiseBuffer[(size_t) i] = noiseSmoothed.getNextValue();
         }
 
         float* channels[2] {};
         for (int ch = 0; ch < juce::jmin (numChannels, 2); ++ch)
             channels[ch] = buffer.getWritePointer (ch, pos);
         engine.process (channels, juce::jmin (numChannels, 2), n, amountBuffer.data(), fxBuffer.data());
-        snowfall.process (channels, juce::jmin (numChannels, 2), n, amountBuffer.data()); // clean noise on top
+        snowfall.process (channels, juce::jmin (numChannels, 2), n, amountBuffer.data(), noiseBuffer.data()); // clean noise on top
     }
 }
 

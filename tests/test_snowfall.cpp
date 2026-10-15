@@ -7,18 +7,17 @@ namespace
 {
 constexpr double sr = 48000.0;
 
-// Snowfall alone (on silence), stereo, at a fixed Amount
-std::vector<std::vector<float>> snow (float amount, double seconds, bool enabled = true)
+// The noise alone (on silence), stereo, at a fixed Amount and Noise level
+std::vector<std::vector<float>> snow (float amount, double seconds, float noise = 1.0f)
 {
     gf::Snowfall s;
     s.prepare (sr, 2);
-    s.setEnabled (enabled, true);
     std::vector<std::vector<float>> io (2, std::vector<float> ((size_t) (sr * seconds), 0.0f));
-    std::vector<float> a (io[0].size(), amount);
+    std::vector<float> a (io[0].size(), amount), n (io[0].size(), noise);
     for (size_t pos = 0; pos < io[0].size(); pos += 512)
     {
         float* ch[2] = { io[0].data() + pos, io[1].data() + pos };
-        s.process (ch, 2, (int) std::min<size_t> (512, io[0].size() - pos), a.data() + pos);
+        s.process (ch, 2, (int) std::min<size_t> (512, io[0].size() - pos), a.data() + pos, n.data() + pos);
     }
     return io;
 }
@@ -46,10 +45,20 @@ TEST (snowfall_off_leaves_audio_untouched)
     gf::Snowfall s;
     s.prepare (sr, 1);
     auto in = sine (sr, 1.0, 440.0, 0.5f), io = in;
-    std::vector<float> a (in.size(), 1.0f);
+    std::vector<float> a (in.size(), 1.0f), noise (in.size(), 0.0f);
     float* ch = io.data();
-    s.process (&ch, 1, (int) io.size(), a.data());
+    s.process (&ch, 1, (int) io.size(), a.data(), noise.data());
     CHECK (io == in);
+}
+
+TEST (noise_level_follows_the_noise_control)
+{
+    const double full = rms (snow (1.0f, 2.0, 1.0f)[0].data(), (size_t) (2 * sr));
+    const double half = rms (snow (1.0f, 2.0, 0.5f)[0].data(), (size_t) (2 * sr));
+    const double none = rms (snow (1.0f, 2.0, 0.0f)[0].data(), (size_t) (2 * sr));
+    std::printf ("    noise 100 / 50 / 0 %%: %.5f %.5f %.5f\n", full, half, none);
+    CHECK_NEAR (half / full, 0.5, 0.05);
+    CHECK (none == 0.0);
 }
 
 TEST (snowfall_level_follows_amount)
@@ -80,18 +89,8 @@ TEST (snowfall_sweeps_brighter_with_amount)
     CHECK (brightRatio > dullRatio * 4.0);
 }
 
-TEST (snowfall_is_stereo_and_fades_in)
+TEST (snowfall_is_stereo)
 {
     auto x = snow (1.0f, 2.0);
     CHECK (x[0] != x[1]);
-
-    gf::Snowfall s;
-    s.prepare (sr, 1);
-    s.setEnabled (true, false); // switched on while playing: fades in
-    std::vector<float> io ((size_t) sr, 0.0f), a (io.size(), 1.0f);
-    float* ch = io.data();
-    s.process (&ch, 1, (int) io.size(), a.data());
-    const double firstMs = rms (io.data(), 48), steady = rms (io.data() + 24000, 24000);
-    std::printf ("    first ms %.5f, steady %.5f\n", firstMs, steady);
-    CHECK (firstMs < steady * 0.2);
 }

@@ -29,13 +29,13 @@ public:
     juce::Colour accent { 0xff4f9dff }, accentLight { 0xffa8e0ff };
 };
 
-// Bottom-left button: a halftone dot pattern that reads as noise. Toggles Noise (clean, swept noise that
-// follows Amount). Grey when off, lit in the preset colour when on.
-class SnowfallButton : public juce::Button
+// Bottom-left Noise control: a halftone dot pattern that reads as noise. Drag up or down to set the Noise
+// level; the dots fill with the preset colour from the bottom up as it rises (grey at 0 %, all lit at 100 %).
+class NoiseControl : public juce::Slider
 {
 public:
-    SnowfallButton();
-    void paintButton (juce::Graphics&, bool isHighlighted, bool isDown) override;
+    NoiseControl();
+    void paint (juce::Graphics&) override;
 
     juce::Colour accent { 0xff4f9dff }, accentLight { 0xffa8e0ff };
 
@@ -65,6 +65,7 @@ public:
         bool capitals = false; // preset name and labels in spaced capitals
     };
     static FontSet& fonts();
+    void showNoiseValue (bool shouldShow); // also used by the snapshot tool
     void resized() override;
 
 private:
@@ -97,8 +98,10 @@ private:
     juce::TextButton previous { juce::CharPointer_UTF8 ("\xe2\x80\xb9") }, next { juce::CharPointer_UTF8 ("\xe2\x80\xba") };
     juce::Label presetName;
     SnowflakeButton snowflake;
-    SnowfallButton snowfall;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> holdAttachment, snowAttachment;
+    NoiseControl noiseControl;
+    juce::Label noiseValue; // shows the Noise level beside the dots while dragging
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> holdAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> noiseAttachment;
     std::vector<Shard> shards;
     std::vector<float> edgeNoise; // -1..1 per edge point of the splash
     int shownPreset = -1;

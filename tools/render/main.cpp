@@ -1,7 +1,7 @@
 // Offline renderer: hear Freeze without a DAW.
 //
-//   render [--test-pluck | --in file.wav] [--preset Name | --all] [--freeze 0..1 | --sweep]
-//          [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--reverse 0..1] [--noise] [--out file.wav]
+//   render [--test-pluck | --in file.wav] [--preset Name | --all] [--freeze 0..1 | --sweep] [--grain-sweep]
+//          [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--reverse 0..1] [--noise 0..1] [--out file.wav]
 //
 // Writes "00 Dry.wav" next to the output for comparison. --all writes one file per preset.
 #include "dsp/FreezeEngine.h"
@@ -82,7 +82,8 @@ struct Settings
     float grain = -1.0f, fx = -1.0f; // -1: use the preset's starting value
     double holdAt = -1.0;           // seconds; switch Hold on from this point (-1: never)
     float reverse = 0.5f;           // share of reversed grains at full Amount
-    bool snow = false;              // add the Noise layer
+    float noise = 0.0f;             // Noise control level (0..1)
+    bool grainSweep = false;        // Grain knob ramps 0 -> 1 over the file
 };
 
 juce::AudioBuffer<float> render (const juce::AudioBuffer<float>& dry, double sampleRate, const Settings& s)
@@ -99,7 +100,7 @@ juce::AudioBuffer<float> render (const juce::AudioBuffer<float>& dry, double sam
 
     gf::Snowfall snowfall;
     snowfall.prepare (sampleRate, 2);
-    snowfall.setEnabled (s.snow, true);
+    std::vector<float> noiseAmount (512, s.noise);
 
     auto out = dry;
     const int length = out.getNumSamples();
@@ -110,9 +111,11 @@ juce::AudioBuffer<float> render (const juce::AudioBuffer<float>& dry, double sam
         for (int i = 0; i < n; ++i)
             amount[(size_t) i] = s.sweep ? (float) (pos + i) / (float) length : s.freeze;
         engine.setHold (s.holdAt >= 0.0 && pos >= (int) (s.holdAt * sampleRate));
+        if (s.grainSweep)
+            engine.setGrainSeconds (gf::grainKnobToSeconds ((float) pos / (float) length));
         float* channels[2] = { out.getWritePointer (0, pos), out.getWritePointer (1, pos) };
         engine.process (channels, 2, n, amount.data(), fxAmount.data());
-        snowfall.process (channels, 2, n, amount.data());
+        snowfall.process (channels, 2, n, amount.data(), noiseAmount.data());
     }
     return out;
 }
@@ -149,9 +152,10 @@ int main (int argc, char** argv)
         else if (arg == "--grain" && hasValue) settings.grain = (float) std::atof (argv[++i]);
         else if (arg == "--fx" && hasValue) settings.fx = (float) std::atof (argv[++i]);
         else if (arg == "--sweep") settings.sweep = true;
+        else if (arg == "--grain-sweep") settings.grainSweep = true;
         else if (arg == "--hold-at" && hasValue) settings.holdAt = std::atof (argv[++i]);
         else if (arg == "--reverse" && hasValue) settings.reverse = (float) std::atof (argv[++i]);
-        else if (arg == "--noise") settings.snow = true;
+        else if (arg == "--noise" && hasValue) settings.noise = (float) std::atof (argv[++i]);
         else if (arg == "--all") all = true;
         else if (arg == "--test-pluck") inPath = {};
         else if (arg == "--preset" && hasValue)
@@ -166,7 +170,7 @@ int main (int argc, char** argv)
         else
         {
             std::fprintf (stderr, "Usage: render [--test-pluck | --in file.wav] [--preset Name | --all] "
-                                  "[--freeze 0..1 | --sweep] [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--reverse 0..1] [--noise] [--out file.wav]\n");
+                                  "[--freeze 0..1 | --sweep] [--grain-sweep] [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--reverse 0..1] [--noise 0..1] [--out file.wav]\n");
             return 1;
         }
     }

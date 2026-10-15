@@ -261,8 +261,20 @@ FreezeEditor::FreezeEditor (FreezeProcessor& p)
 
     holdAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (freezeProcessor.apvts, "hold", snowflake);
     addAndMakeVisible (snowflake);
-    snowAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (freezeProcessor.apvts, "noise", snowfall);
-    addAndMakeVisible (snowfall);
+    noiseAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (freezeProcessor.apvts, "noise", noiseControl);
+    noiseControl.onValueChange = [this] {
+        noiseValue.setText (freezeProcessor.apvts.getParameter ("noise")->getCurrentValueAsText(), juce::dontSendNotification);
+        noiseControl.repaint();
+    };
+    noiseControl.onDragStart = [this] { showNoiseValue (true); };
+    noiseControl.onDragEnd = [this] { showNoiseValue (false); };
+    addAndMakeVisible (noiseControl);
+
+    noiseValue.setFont (uiFont (11.0f, "Demi Bold"));
+    noiseValue.setJustificationType (juce::Justification::centredLeft);
+    noiseValue.setInterceptsMouseClicks (false, false);
+    noiseValue.setText (freezeProcessor.apvts.getParameter ("noise")->getCurrentValueAsText(), juce::dontSendNotification);
+    addChildComponent (noiseValue);
 
     // Shards scattered around the hexagon edge; fixed seed so the splash always looks the same.
     juce::Random rng (2026);
@@ -350,6 +362,11 @@ FreezeEditor::FontSet& FreezeEditor::fonts()
     return set;
 }
 
+void FreezeEditor::showNoiseValue (bool shouldShow)
+{
+    noiseValue.setVisible (shouldShow);
+}
+
 void FreezeEditor::stepPreset (int delta)
 {
     const int index = (freezeProcessor.currentPreset() + delta + gf::kNumPresets) % gf::kNumPresets;
@@ -375,9 +392,10 @@ void FreezeEditor::applyPresetColours()
     snowflake.accent = accent;
     snowflake.accentLight = accentLight;
     snowflake.repaint();
-    snowfall.accent = accent;
-    snowfall.accentLight = accentLight;
-    snowfall.repaint();
+    noiseControl.accent = accent;
+    noiseControl.accentLight = accentLight;
+    noiseControl.repaint();
+    noiseValue.setColour (juce::Label::textColourId, accentDeep);
 
     presetName.setText (labelText (preset.name), juce::dontSendNotification);
     presetName.setColour (juce::Label::textColourId, ink);
@@ -440,10 +458,12 @@ void FreezeEditor::drawSplash (juce::Graphics& g, juce::Point<float> c, float le
     }
 }
 
-SnowfallButton::SnowfallButton() : juce::Button ("Noise")
+NoiseControl::NoiseControl() : juce::Slider ("Noise")
 {
-    setClickingTogglesState (true);
-    setTooltip ("Noise: clean, airy noise that follows and sweeps with the big knob");
+    setSliderStyle (juce::Slider::RotaryVerticalDrag); // drag up/down; the dots show the value
+    setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
+    setDoubleClickReturnValue (true, 0.0);
+    setTooltip ("Noise: drag up or down for clean, airy noise that sweeps with the big knob");
 
     // Halftone fade: a round dot grid whose dots shrink towards the edge, like dithered noise
     for (int row = -6; row <= 6; ++row)
@@ -457,23 +477,29 @@ SnowfallButton::SnowfallButton() : juce::Button ("Noise")
         }
 }
 
-void SnowfallButton::paintButton (juce::Graphics& g, bool isHighlighted, bool isDown)
+void NoiseControl::paint (juce::Graphics& g)
 {
     const auto area = getLocalBounds().toFloat().reduced (1.0f);
-    const bool on = getToggleState();
-    if (on)
+    const auto level = (float) getValue();
+
+    if (level > 0.0f)
     {
-        const auto c = area.getCentre();
         const auto glow = getLocalBounds().toFloat();
-        g.setGradientFill (juce::ColourGradient (accentLight.withAlpha (0.7f), c.x, c.y,
+        const auto c = glow.getCentre();
+        g.setGradientFill (juce::ColourGradient (accentLight.withAlpha (0.7f * level), c.x, c.y,
                                                  accentLight.withAlpha (0.0f), c.x + glow.getWidth() * 0.5f, c.y, true));
         g.fillEllipse (glow);
     }
-    auto colour = on ? accent : inkSoft;
-    if (isHighlighted || isDown)
-        colour = colour.interpolatedWith (on ? accent.darker (0.3f) : ink, 0.5f);
+
+    // Fill line: from the bottom of the dot pattern (0 %) to its top (100 %)
+    const float fillFrom = 0.5f + 0.47f - level * 0.94f;
+    const bool hot = isMouseOverOrDragging();
     for (const auto& d : dots)
     {
+        const bool lit = level > 0.0f && d.y >= fillFrom;
+        auto colour = lit ? accent : inkSoft;
+        if (hot)
+            colour = colour.interpolatedWith (lit ? accent.darker (0.3f) : ink, 0.35f);
         const float r = d.radius * area.getWidth();
         g.setColour (colour);
         g.fillEllipse (area.getX() + d.x * area.getWidth() - r, area.getY() + d.y * area.getHeight() - r, 2.0f * r, 2.0f * r);
@@ -549,7 +575,8 @@ void FreezeEditor::resized()
     previous.setBounds (presetName.getX() - 28, 8, 26, 24);
     next.setBounds (presetName.getRight() + 2, 8, 26, 24);
     snowflake.setBounds (getWidth() - 48, 0, 40, 40);
-    snowfall.setBounds (8, getHeight() - 48, 40, 40); // mirrors the snowflake in the top right
+    noiseControl.setBounds (8, getHeight() - 48, 40, 40); // mirrors the snowflake in the top right
+    noiseValue.setBounds (noiseControl.getRight() + 2, noiseControl.getY() + 10, 60, 20);
 
     // Big Amount knob in the middle, Grain and FX side by side underneath it
     // Width sets the knob size; the extra height is room for the shadow

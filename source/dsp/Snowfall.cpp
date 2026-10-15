@@ -44,7 +44,6 @@ void Snowfall::prepare (double newSampleRate, int numChannels, uint64_t newSeed)
     channels.assign ((size_t) std::max (1, numChannels), Channel {});
     highPass = makeHighPass (kHighPassHz, sampleRate);
     lowPass = makeLowPass (kSweepFromHz, sampleRate);
-    gainStep = (float) (1.0 / (0.030 * sampleRate));
     reset();
 }
 
@@ -58,21 +57,16 @@ void Snowfall::reset()
             std::fill (std::begin (st), std::end (st), 0.0f);
         std::fill (std::begin (c.lowPassState), std::end (c.lowPassState), 0.0f);
     }
-    gain = gainTarget;
     counter = 0;
 }
 
-void Snowfall::setEnabled (bool shouldBeOn, bool immediately)
+void Snowfall::process (float* const* audio, int numChannels, int numSamples, const float* amount, const float* noise)
 {
-    gainTarget = shouldBeOn ? 1.0f : 0.0f;
-    if (immediately)
-        gain = gainTarget;
-}
-
-void Snowfall::process (float* const* audio, int numChannels, int numSamples, const float* amount)
-{
-    if (gain <= 0.0f && gainTarget <= 0.0f)
-        return; // off: the audio is untouched
+    bool silent = true;
+    for (int i = 0; i < numSamples && silent; ++i)
+        silent = noise[i] <= 0.0f;
+    if (silent)
+        return; // Noise at 0: the audio is untouched
 
     numChannels = std::min (numChannels, (int) channels.size());
     for (int i = 0; i < numSamples; ++i)
@@ -89,8 +83,7 @@ void Snowfall::process (float* const* audio, int numChannels, int numSamples, co
             level = (float) (kFullLevel / (0.577 * std::sqrt (bandwidth)));
         }
 
-        gain = gain < gainTarget ? std::min (gainTarget, gain + gainStep) : std::max (gainTarget, gain - gainStep);
-        const float scale = std::clamp (amount[i], 0.0f, 1.0f) * level * gain;
+        const float scale = std::clamp (amount[i], 0.0f, 1.0f) * std::clamp (noise[i], 0.0f, 1.0f) * level;
 
         for (int ch = 0; ch < numChannels; ++ch)
         {

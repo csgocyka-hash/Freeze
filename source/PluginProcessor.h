@@ -49,8 +49,8 @@ private:
 
     gf::FreezeEngine engine;
     gf::Snowfall snowfall;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> freezeSmoothed, fxSmoothed;
-    std::vector<float> amountBuffer, fxBuffer;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> freezeSmoothed, fxSmoothed, noiseSmoothed;
+    std::vector<float> amountBuffer, fxBuffer, noiseBuffer;
     std::atomic<float>* freezeParam = nullptr;
     std::atomic<float>* grainParam = nullptr;
     std::atomic<float>* fxParam = nullptr;
