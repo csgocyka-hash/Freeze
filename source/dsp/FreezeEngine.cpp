@@ -34,6 +34,7 @@ void FreezeEngine::reset()
 {
     stagingFill = 0;
     sampleCounter = 0;
+    grainsSpawned = grainsReversed = 0;
     bypassed = false;
     fx.reset();
     for (size_t ch = 0; ch < channelState.size(); ++ch)
@@ -48,6 +49,7 @@ void FreezeEngine::reset()
         // Each channel draws its own grain positions, so left and right decorrelate.
         c.random.seed (seed * 0x9e3779b97f4a7c15ull + ch + 1);
         c.nextSpawn = 0;
+        c.reverseAccumulator = 0.5f;
     }
 }
 
@@ -65,6 +67,16 @@ void FreezeEngine::setGrainSeconds (double seconds)
 void FreezeEngine::setDensity (double grainsOverlapping)
 {
     density = std::clamp (grainsOverlapping, 2.0, 16.0);
+}
+
+void FreezeEngine::setMaxReverseShare (float share)
+{
+    maxReverseShare = std::clamp (share, 0.0f, 1.0f);
+}
+
+double FreezeEngine::reversedShare() const
+{
+    return grainsSpawned > 0 ? (double) grainsReversed / (double) grainsSpawned : 0.0;
 }
 
 void FreezeEngine::setHold (bool shouldHold)
@@ -111,16 +123,26 @@ int FreezeEngine::nextSpawnInterval (Channel& c)
     return std::max (1, (int) std::lround (spacingSeconds() * sampleRate * jitter));
 }
 
-void FreezeEngine::spawnGrain (Channel& c)
+void FreezeEngine::spawnGrain (Channel& c, float amount)
 {
     const int grainLength = std::max (2, (int) std::lround (grainSeconds * sampleRate));
+    const int64_t halfGrainSegments = (grainLength / 2 + segmentLength - 1) / segmentLength;
+
+    // Direction first. Some grains play backwards, more of them as Amount rises, so at full Amount attacks
+    // and decays blend into one directionless wash. Reversed grains are spread evenly between forward ones
+    // (error diffusion, not coin flips) so runs of one direction don't leave holes.
+    c.reverseAccumulator += maxReverseShare * amount;
+    const bool reverse = c.reverseAccumulator >= 1.0f;
+    if (reverse)
+        c.reverseAccumulator -= 1.0f;
 
     // Candidates: segments from the last kSelectSeconds of committed material, leaving out the newest
-    // ones so that a whole grain fits before the write head.
-    const int64_t excluded = (grainLength / 2 + segmentLength - 1) / segmentLength;
+    // ones so that a whole grain fits before the write head (a reversed grain may sit up to half a grain
+    // later, see below, so it leaves out twice as many).
+    const int64_t excluded = halfGrainSegments * (reverse ? 2 : 1);
     const int64_t windowSegments = (int64_t) std::lround (kSelectSeconds / kSegmentSeconds);
     const int64_t last = c.committedSegments - excluded;            // exclusive
-    const int64_t first = std::max<int64_t> ((grainLength / 2 + segmentLength - 1) / segmentLength, c.committedSegments - windowSegments);
+    const int64_t first = std::max<int64_t> (halfGrainSegments, c.committedSegments - windowSegments);
     if (last <= first)
         return;
 
@@ -162,7 +184,15 @@ void FreezeEngine::spawnGrain (Channel& c)
             voice = &g;
     }
 
-    voice->start = chosen * segmentLength + c.random.below (segmentLength) - grainLength / 2;
+    // A forward grain is centred on the chosen spot, so the loud part after it fills the second half of
+    // the grain. A reversed grain plays that loud part backwards, ending at the chosen spot; it is moved
+    // later by the length of the loud run so the loud part again fills the second half.
+    int64_t loudRun = 0;
+    if (reverse)
+        for (int64_t s = chosen + 1; s < c.committedSegments && loudRun < halfGrainSegments; ++s, ++loudRun)
+            if (c.energy[(size_t) (s % bufferSegments)] < threshold)
+                break;
+    voice->start = chosen * segmentLength + c.random.below (segmentLength) - grainLength / 2 + loudRun * segmentLength;
 
     // Level-match the grain: its windowed RMS is brought towards the recent input level (within +-6 dB),
     // so short grains on loud attacks are not louder than long grains over whole notes.
@@ -179,7 +209,10 @@ void FreezeEngine::spawnGrain (Channel& c)
     voice->gain = grainRms > 0.0 ? (float) std::clamp (targetRms / grainRms, 0.5, 2.0) : 1.0f;
     voice->age = 0;
     voice->length = grainLength;
+    voice->reverse = reverse;
     voice->active = true;
+    ++grainsSpawned;
+    grainsReversed += reverse ? 1 : 0;
 }
 
 float FreezeEngine::renderGrains (Channel& c)
@@ -194,7 +227,8 @@ float FreezeEngine::renderGrains (Channel& c)
         const float phase = (float) g.age * (float) kWindowTableSize / (float) (g.length - 1);
         const auto idx = std::min ((int) phase, kWindowTableSize - 1);
         const float w = window[(size_t) idx] + (window[(size_t) idx + 1] - window[(size_t) idx]) * (phase - (float) idx);
-        sum += c.buffer[(size_t) ((g.start + g.age) % capacity)] * w * g.gain;
+        const int offset = g.reverse ? g.length - 1 - g.age : g.age;
+        sum += c.buffer[(size_t) ((g.start + offset) % capacity)] * w * g.gain;
         if (++g.age >= g.length)
             g.active = false;
     }
@@ -234,7 +268,7 @@ void FreezeEngine::process (float* const* channels, int numChannels, int numSamp
                 auto& c = channelState[(size_t) ch];
                 if (sampleCounter >= c.nextSpawn)
                 {
-                    spawnGrain (c);
+                    spawnGrain (c, freezeAmount[i]);
                     c.nextSpawn += nextSpawnInterval (c);
                 }
                 float wet = renderGrains (c);

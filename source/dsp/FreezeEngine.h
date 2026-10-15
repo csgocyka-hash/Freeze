@@ -35,6 +35,12 @@ public:
     void setDensity (double grainsOverlapping);
     void setFxCharacter (const FxCharacter& character);
 
+    // Share of grains played backwards at full Amount (scaled by Amount below that). Default 0.5.
+    void setMaxReverseShare (float share);
+
+    // Fraction of grains spawned since reset() that play backwards (diagnostic).
+    double reversedShare() const;
+
     // Hold: stop recording new input, so the grains keep playing the sound captured so far.
     void setHold (bool shouldHold);
 
@@ -52,6 +58,7 @@ private:
         int age = 0;       // samples played so far
         int length = 0;
         float gain = 1.0f; // brings the grain to the recent input level
+        bool reverse = false;
         bool active = false;
     };
 
@@ -63,11 +70,12 @@ private:
         int64_t committedSegments = 0;
         Grain grains[kMaxGrains];
         Random random;
+        float reverseAccumulator = 0.0f; // spreads reversed grains evenly between forward ones
         int64_t nextSpawn = 0;
     };
 
     void commitSegment (Channel& c);
-    void spawnGrain (Channel& c);
+    void spawnGrain (Channel& c, float amount);
     float renderGrains (Channel& c);
     int nextSpawnInterval (Channel& c);
     double spacingSeconds() const;
@@ -79,6 +87,8 @@ private:
     double density = kDensity;
     bool bypassed = false;
     bool hold = false;
+    float maxReverseShare = 0.5f;
+    int64_t grainsSpawned = 0, grainsReversed = 0;
     FxChain fx;
     int stagingFill = 0;
     int64_t sampleCounter = 0;

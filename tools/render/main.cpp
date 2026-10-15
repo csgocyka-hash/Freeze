@@ -1,7 +1,7 @@
 // Offline renderer: hear Freeze without a DAW.
 //
 //   render [--test-pluck | --in file.wav] [--preset Name | --all] [--freeze 0..1 | --sweep]
-//          [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--out file.wav]
+//          [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--reverse 0..1] [--out file.wav]
 //
 // Writes "00 Dry.wav" next to the output for comparison. --all writes one file per preset.
 #include "dsp/FreezeEngine.h"
@@ -80,6 +80,7 @@ struct Settings
     bool sweep = false;
     float grain = -1.0f, fx = -1.0f; // -1: use the preset's starting value
     double holdAt = -1.0;           // seconds; switch Hold on from this point (-1: never)
+    float reverse = 0.5f;           // share of reversed grains at full Amount
 };
 
 juce::AudioBuffer<float> render (const juce::AudioBuffer<float>& dry, double sampleRate, const Settings& s)
@@ -89,6 +90,7 @@ juce::AudioBuffer<float> render (const juce::AudioBuffer<float>& dry, double sam
     engine.prepare (sampleRate, 512, 2);
     engine.setSeed (1);
     engine.setDensity (preset.density);
+    engine.setMaxReverseShare (s.reverse);
     engine.setFxCharacter (preset.character);
     engine.setGrainSeconds (s.grain >= 0.0f ? gf::grainKnobToSeconds (s.grain) : preset.grainSeconds);
     const float fx = s.fx >= 0.0f ? s.fx : preset.fx;
@@ -141,6 +143,7 @@ int main (int argc, char** argv)
         else if (arg == "--fx" && hasValue) settings.fx = (float) std::atof (argv[++i]);
         else if (arg == "--sweep") settings.sweep = true;
         else if (arg == "--hold-at" && hasValue) settings.holdAt = std::atof (argv[++i]);
+        else if (arg == "--reverse" && hasValue) settings.reverse = (float) std::atof (argv[++i]);
         else if (arg == "--all") all = true;
         else if (arg == "--test-pluck") inPath = {};
         else if (arg == "--preset" && hasValue)
@@ -155,7 +158,7 @@ int main (int argc, char** argv)
         else
         {
             std::fprintf (stderr, "Usage: render [--test-pluck | --in file.wav] [--preset Name | --all] "
-                                  "[--freeze 0..1 | --sweep] [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--out file.wav]\n");
+                                  "[--freeze 0..1 | --sweep] [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--reverse 0..1] [--out file.wav]\n");
             return 1;
         }
     }
