@@ -520,15 +520,16 @@ void NoiseControl::drawIcon (juce::Graphics& g, juce::Rectangle<float> area, juc
 DetuneControl::DetuneControl() : FillControl ("Detune")
 {
     setTooltip ("Detune: drag up or down to pitch each grain randomly, up to 50 cents up or down");
-    // Stacked horizontal lines, symmetric in length around the middle, each a different weight and nudged
-    // a little left or right - like slightly out-of-tune copies of one line
-    const float thickness[] = { 0.035f, 0.06f, 0.045f, 0.075f, 0.045f, 0.06f, 0.035f };
-    const float halfLength[] = { 0.18f, 0.27f, 0.34f, 0.40f, 0.34f, 0.27f, 0.18f };
-    const float nudge[] = { 0.05f, -0.06f, 0.04f, 0.0f, -0.04f, 0.06f, -0.05f };
-    for (int i = 0; i < 7; ++i)
+    // Tightly stacked, very thin horizontal lines of equal weight, symmetric in length around the middle and
+    // each nudged a little left or right - like slightly out-of-tune copies of one line
+    constexpr int count = 13;
+    const float nudge[count] = { 0.04f, -0.05f, 0.03f, -0.02f, 0.05f, -0.04f, 0.0f, 0.04f, -0.05f, 0.02f, -0.03f, 0.05f, -0.04f };
+    for (int i = 0; i < count; ++i)
     {
-        const float y = 0.14f + 0.12f * (float) i;
-        lines.push_back ({ y, thickness[i], 0.5f + nudge[i] - halfLength[i], 0.5f + nudge[i] + halfLength[i] });
+        const float t = (float) i / (float) (count - 1) * 2.0f - 1.0f; // -1 (top) .. 1 (bottom)
+        const float halfLength = 0.40f * std::sqrt (1.0f - 0.82f * t * t);
+        const float y = 0.5f + t * 0.33f;
+        lines.push_back ({ y, 0.018f, 0.5f + nudge[i] - halfLength, 0.5f + nudge[i] + halfLength });
     }
     iconTop = lines.front().y - lines.front().thickness * 0.5f;
     iconBottom = lines.back().y + lines.back().thickness * 0.5f;
