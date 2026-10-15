@@ -7,8 +7,8 @@ A granular VST3 effect that turns a rhythm, such as a pluck pattern, into one su
 | **Amount** (big knob) | Blends from your dry signal (0 %) to the full freeze (100 %). At 0 % the audio passes through untouched. Up to 50 % the freeze is a grain cloud; from 50 % to 100 % the grains get twice as long and about 24 overlap, they read from a copy of the input with each note's attack and decay flattened and every note start faded in (no clicks), and a quiet high-passed spectral layer (20 %) adds a steady shimmer. At 100 % there is no pluck left. |
 | **Grain** | Grain length, from 40 ms (shimmery, textured) to 500 ms (smooth, slow). Near 100 % Amount it also sets how quickly the shimmer layer follows new notes (about 0.3 s to 4 s). |
 | **FX** | Reverb and delay on the frozen sound only. |
-| **Hold** (snowflake, top right) | Freezes the sound playing right now: nothing new is recorded, so the grains keep playing that moment for as long as Hold is on, while new notes pass through dry. Click again to release. |
-| **Snowfall** (dots, bottom left) | Adds clean, airy noise with no low end (high-passed at 800 Hz). It follows the big knob: louder and brighter as you turn up, sweeping from about 1.5 kHz to 14 kHz, up to about -32 dBFS. |
+| **Freeze** (snowflake, top right) | Freezes the sound playing right now: nothing new is recorded, so the grains keep playing that moment for as long as Freeze is on, while new notes pass through dry. Click again to release. |
+| **Noise** (dots, bottom left) | Adds clean, airy noise with no low end (high-passed at 800 Hz). It follows the big knob: louder and brighter as you turn up, sweeping from about 1.5 kHz to 14 kHz, up to about -32 dBFS. |
 | **Preset** (‹ › at the top) | Ice, Glass, Haze, Ember, Abyss. Each preset has its own colours, grain density and kind of reverb/delay, and sets Grain and FX to a starting point. |
 
 The freeze keeps holding after you stop playing, as long as Amount is up.
@@ -31,7 +31,7 @@ build/render_artefacts/Release/render --test-pluck --all
 # one preset with Amount sweeping 0 -> 100 %
 build/render_artefacts/Release/render --test-pluck --preset Haze --sweep --out "renders/Haze sweep.wav"
 
-# switch Hold on 2.6 s in: the chord playing at that moment keeps sounding while the input moves on
+# switch Freeze (the snowflake) on 2.6 s in: the chord playing at that moment keeps sounding while the input moves on
 build/render_artefacts/Release/render --test-pluck --preset Ice --hold-at 2.6 --out "renders/Ice hold.wav"
 
 # your own audio, with your own knob settings (0..1)

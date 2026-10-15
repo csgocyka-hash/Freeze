@@ -261,7 +261,7 @@ FreezeEditor::FreezeEditor (FreezeProcessor& p)
 
     holdAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (freezeProcessor.apvts, "hold", snowflake);
     addAndMakeVisible (snowflake);
-    snowAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (freezeProcessor.apvts, "snow", snowfall);
+    snowAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (freezeProcessor.apvts, "noise", snowfall);
     addAndMakeVisible (snowfall);
 
     // Shards scattered around the hexagon edge; fixed seed so the splash always looks the same.
@@ -440,10 +440,10 @@ void FreezeEditor::drawSplash (juce::Graphics& g, juce::Point<float> c, float le
     }
 }
 
-SnowfallButton::SnowfallButton() : juce::Button ("Snowfall")
+SnowfallButton::SnowfallButton() : juce::Button ("Noise")
 {
     setClickingTogglesState (true);
-    setTooltip ("Snowfall: clean, airy noise that follows and sweeps with the big knob");
+    setTooltip ("Noise: clean, airy noise that follows and sweeps with the big knob");
 
     // Halftone fade: a round dot grid whose dots shrink towards the edge, like dithered noise
     for (int row = -6; row <= 6; ++row)

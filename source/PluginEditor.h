@@ -14,14 +14,14 @@ public:
     juce::Colour accent { 0xff4f9dff }, accentLight { 0xffa8e0ff }, accentDeep { 0xff2a55e6 };
 };
 
-// The snowflake in the top right: toggles Hold. Grey when off, lit in the preset colour with a glow when on.
+// The snowflake in the top right: toggles Freeze (hold the sound playing now). Grey when off, lit in the preset colour with a glow when on.
 class SnowflakeButton : public juce::Button
 {
 public:
-    SnowflakeButton() : juce::Button ("Hold")
+    SnowflakeButton() : juce::Button ("Freeze")
     {
         setClickingTogglesState (true);
-        setTooltip ("Hold: keep playing the sound frozen right now");
+        setTooltip ("Freeze: keep playing the sound frozen right now");
     }
 
     void paintButton (juce::Graphics&, bool isHighlighted, bool isDown) override;
@@ -29,7 +29,7 @@ public:
     juce::Colour accent { 0xff4f9dff }, accentLight { 0xffa8e0ff };
 };
 
-// Bottom-left button: a halftone dot pattern that reads as noise. Toggles Snowfall (clean, swept noise that
+// Bottom-left button: a halftone dot pattern that reads as noise. Toggles Noise (clean, swept noise that
 // follows Amount). Grey when off, lit in the preset colour when on.
 class SnowfallButton : public juce::Button
 {

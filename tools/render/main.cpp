@@ -1,7 +1,7 @@
 // Offline renderer: hear Freeze without a DAW.
 //
 //   render [--test-pluck | --in file.wav] [--preset Name | --all] [--freeze 0..1 | --sweep]
-//          [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--reverse 0..1] [--snow] [--out file.wav]
+//          [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--reverse 0..1] [--noise] [--out file.wav]
 //
 // Writes "00 Dry.wav" next to the output for comparison. --all writes one file per preset.
 #include "dsp/FreezeEngine.h"
@@ -82,7 +82,7 @@ struct Settings
     float grain = -1.0f, fx = -1.0f; // -1: use the preset's starting value
     double holdAt = -1.0;           // seconds; switch Hold on from this point (-1: never)
     float reverse = 0.5f;           // share of reversed grains at full Amount
-    bool snow = false;              // add Snowfall noise
+    bool snow = false;              // add the Noise layer
 };
 
 juce::AudioBuffer<float> render (const juce::AudioBuffer<float>& dry, double sampleRate, const Settings& s)
@@ -151,7 +151,7 @@ int main (int argc, char** argv)
         else if (arg == "--sweep") settings.sweep = true;
         else if (arg == "--hold-at" && hasValue) settings.holdAt = std::atof (argv[++i]);
         else if (arg == "--reverse" && hasValue) settings.reverse = (float) std::atof (argv[++i]);
-        else if (arg == "--snow") settings.snow = true;
+        else if (arg == "--noise") settings.snow = true;
         else if (arg == "--all") all = true;
         else if (arg == "--test-pluck") inPath = {};
         else if (arg == "--preset" && hasValue)
@@ -166,7 +166,7 @@ int main (int argc, char** argv)
         else
         {
             std::fprintf (stderr, "Usage: render [--test-pluck | --in file.wav] [--preset Name | --all] "
-                                  "[--freeze 0..1 | --sweep] [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--reverse 0..1] [--snow] [--out file.wav]\n");
+                                  "[--freeze 0..1 | --sweep] [--grain 0..1] [--fx 0..1] [--hold-at seconds] [--reverse 0..1] [--noise] [--out file.wav]\n");
             return 1;
         }
     }

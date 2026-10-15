@@ -13,7 +13,7 @@ FreezeProcessor::FreezeProcessor()
     fxParam = apvts.getRawParameterValue ("fx");
     presetParam = apvts.getRawParameterValue ("preset");
     holdParam = apvts.getRawParameterValue ("hold");
-    snowParam = apvts.getRawParameterValue ("snow");
+    snowParam = apvts.getRawParameterValue ("noise");
     apvts.addParameterListener ("preset", this);
 }
 
@@ -87,7 +87,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout FreezeProcessor::createLayou
     const auto& first = gf::preset (0);
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
     layout.add (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { "freeze", 1 }, "Freeze", juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f,
+        juce::ParameterID { "freeze", 1 }, "Amount", juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f,
         juce::AudioParameterFloatAttributes().withStringFromValueFunction (percent)));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { "grain", 1 }, "Grain", juce::NormalisableRange<float> (0.0f, 1.0f),
@@ -97,8 +97,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout FreezeProcessor::createLayou
         juce::ParameterID { "fx", 1 }, "FX", juce::NormalisableRange<float> (0.0f, 1.0f), first.fx,
         juce::AudioParameterFloatAttributes().withStringFromValueFunction (percent)));
     layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "preset", 1 }, "Preset", presetNames, 0));
-    layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "hold", 1 }, "Hold", false));
-    layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "snow", 1 }, "Snowfall", false));
+    layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "hold", 1 }, "Freeze", false)); // the snowflake
+    layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "noise", 1 }, "Noise", false)); // the dot button
     return layout;
 }
 

@@ -33,6 +33,7 @@ TEST (parameter_layout)
     CHECK_NEAR (param->getNormalisableRange().start, 0.0, 1e-6);
     CHECK_NEAR (param->getNormalisableRange().end, 1.0, 1e-6);
     CHECK (param->getText (0.5f, 10) == "50 %");
+    CHECK (param->getName (20) == "Amount"); // the snowflake is the parameter called Freeze
 }
 
 TEST (passthrough_at_zero)
@@ -237,6 +238,7 @@ TEST (hold_parameter)
     if (hold == nullptr)
         return;
     CHECK (! hold->get());
+    CHECK (hold->getName (20) == "Freeze");
     hold->setValueNotifyingHost (1.0f);
     juce::MemoryBlock state;
     a.getStateInformation (state);
@@ -252,7 +254,7 @@ TEST (snowflake_button_toggles_hold)
     std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
     juce::Button* snowflake = nullptr;
     for (auto* child : editor->getChildren())
-        if (auto* b = dynamic_cast<juce::Button*> (child); b != nullptr && b->getName() == "Hold")
+        if (auto* b = dynamic_cast<juce::Button*> (child); b != nullptr && b->getName() == "Freeze")
             snowflake = b;
     CHECK (snowflake != nullptr);
     if (snowflake == nullptr)
@@ -261,19 +263,20 @@ TEST (snowflake_button_toggles_hold)
     CHECK (p.apvts.getRawParameterValue ("hold")->load() > 0.5f);
 }
 
-TEST (snowfall_parameter_and_button)
+TEST (noise_parameter_and_button)
 {
     juce::ScopedJuceInitialiser_GUI gui;
     FreezeProcessor p;
-    auto* snowParam = dynamic_cast<juce::AudioParameterBool*> (p.apvts.getParameter ("snow"));
+    auto* snowParam = dynamic_cast<juce::AudioParameterBool*> (p.apvts.getParameter ("noise"));
     CHECK (snowParam != nullptr);
     if (snowParam == nullptr)
         return;
     CHECK (! snowParam->get());
+    CHECK (snowParam->getName (20) == "Noise");
     std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
     juce::Button* button = nullptr;
     for (auto* child : editor->getChildren())
-        if (auto* b = dynamic_cast<juce::Button*> (child); b != nullptr && b->getName() == "Snowfall")
+        if (auto* b = dynamic_cast<juce::Button*> (child); b != nullptr && b->getName() == "Noise")
             button = b;
     CHECK (button != nullptr);
     if (button != nullptr)
