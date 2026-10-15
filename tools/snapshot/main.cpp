@@ -59,7 +59,7 @@ int main (int argc, char** argv)
                 juce::Graphics g (menuImage);
                 g.addTransform (juce::AffineTransform::scale (2.0f));
                 lf.drawPopupMenuBackground (g, w, itemH * (n + 1) + 8);
-                lf.drawPopupMenuSectionHeader (g, { 0, 4, w, itemH }, "WINDOW SIZE");
+                lf.drawPopupMenuSectionHeader (g, { 0, 4, w, itemH }, "SCALING");
                 const char* labels[] = { "50 %", "75 %", "100 %  (standard)", "125 %", "150 %" };
                 for (int k = 0; k < n; ++k)
                     lf.drawPopupMenuItem (g, { 0, 4 + itemH * (k + 1), w, itemH }, false, true, k == 3, k == 2, false,

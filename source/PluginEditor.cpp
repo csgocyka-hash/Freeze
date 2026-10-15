@@ -725,7 +725,7 @@ void FreezeEditor::showScaleMenu()
     const float scales[] = { 0.5f, 0.75f, 1.0f, 1.25f, 1.5f };
     juce::PopupMenu menu;
     menu.setLookAndFeel (&panel.getLookAndFeelForMenus());
-    menu.addSectionHeader ("WINDOW SIZE");
+    menu.addSectionHeader ("SCALING");
     for (int i = 0; i < 5; ++i)
     {
         const auto text = juce::String (juce::roundToInt (scales[i] * 100.0f)) + " %" + (scales[i] == 1.0f ? "  (standard)" : "");

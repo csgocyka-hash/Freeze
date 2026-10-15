@@ -81,7 +81,7 @@ private:
     std::vector<Line> lines;
 };
 
-// Invisible click area over the FREEZE logo; clicking it opens the window-size menu
+// Invisible click area over the FREEZE logo; clicking it opens the Scaling menu
 class LogoHotspot : public juce::Component, public juce::SettableTooltipClient
 {
 public:
@@ -89,7 +89,7 @@ public:
     {
         setComponentID ("logo");
         setMouseCursor (juce::MouseCursor::PointingHandCursor);
-        setTooltip ("Window size");
+        setTooltip ("Scaling");
     }
     void mouseUp (const juce::MouseEvent& e) override
     {

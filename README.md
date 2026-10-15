@@ -14,7 +14,7 @@ A granular VST3 effect that turns a rhythm, such as a pluck pattern, into one su
 
 The freeze keeps holding after you stop playing, as long as Amount is up.
 
-The window opens small (308 × 280). Click the FREEZE logo to choose a size (50, 75, 100, 125 or 150 %), or resize it from its edges; the size is saved with your project.
+The window opens small (308 × 280). Click the FREEZE logo for Scaling (50, 75, 100, 125 or 150 %), or resize it from its edges; the size is saved with your project.
 
 ## Build on macOS (no admin needed)
 
